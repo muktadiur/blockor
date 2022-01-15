@@ -1,0 +1,181 @@
+#!/bin/sh
+#
+# Copyright (c) 2022-2022, Muktadiur Rahman <muktadiur@gmail.com>
+# All rights reserved.
+
+## version
+blockor_version='0.0.1'
+
+PATH=${PATH}:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+
+
+if [ -r "/usr/local/etc/blockor.conf" ]; then
+    . /usr/local/etc/blockor.conf
+fi
+
+usage() {
+    cat << EOF
+Blockor protects FreeBSD, OpenBSD servers from brute-force attacks.
+Usage:
+  blockor command [args]
+Available Commands:
+  init          Create blockor.conf file with default value.
+  start         Start the blockord.
+  stop          Stop the blockord.
+  add         	Add IP to blocked IP list.
+  delete        Remove IP from blocked IP list.
+  list         	List blocked IP list.
+  status        Blocked IP list summary.
+Use "blockor -v|--version" for version information.
+Use "blockor command -h|--help" for more information about a command.
+EOF
+    exit 1
+}
+
+permission_check() {
+    if [ $(id -u) -ne 0 ]; then
+        echo "blockor: permission denied. root|doas|sudo required"
+        exit 1
+    fi
+}
+
+version() {
+    echo ${blockor_version}
+    exit 0
+}
+
+init() {
+    if [ ! -d "/usr/local/etc" ]; then
+        echo "Directory /usr/local/etc not found."
+        mkdir /usr/local/etc
+    fi
+
+    conf = "/usr/local/etc/blockor.conf"
+    sample_conf = "/usr/local/share/examples/blockor/blockor.sample.conf"
+
+    if [ -z $blockor_config ]
+    then
+        os=$(uname -sr | awk '{print $1}')
+        if [ $os == 'OpenBSD' ]
+        then
+            cat $sample_conf > $conf
+        else
+            sed 's/authlog/auth.log/' $sample_conf > $conf
+        fi
+        echo 'File' $conf 'created.'
+    else
+        echo 'File' $conf 'alrealy exits.'
+    fi
+
+    echo
+    cat <<EOF
+Add these lines to pf.conf file.
+
+table <blockor> persist
+block drop in quick on egress from <blockor> to any
+EOF
+exit 0
+}
+
+start() {
+    nohup $blockord > $blockor_log_file &
+    exit 0
+}
+
+stop() {
+    ps ax | grep "$blockord" | awk '{print $1}' | xargs kill -9
+    exit 0
+}
+
+add() {
+    IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
+    shift
+    if [ -z $IP]
+    then
+        echo 'Invalid IP. Please provide a valid IP.'
+        exit 1
+    else
+        pfctl -t blockor -T add $IP
+    fi
+    exit 0
+}
+
+delete() {
+    IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
+    shift
+    if [ -z $IP]
+    then
+        echo 'Invalid IP. Please provide a valid IP.'
+        exit 1
+    else
+        pfctl -t blockor -T delete $IP
+    fi
+    exit 0
+}
+
+list() {
+    all=${1}
+    shift
+    if [ $all=='all' || $all=='-a' ]
+    then
+        echo "  Count  IP"
+        cat $blockor_file | sort | uniq -c | sort -nr
+    else
+        echo "Blocked IP list:"
+        pfctl -t blockor -T show
+    fi
+    exit 0
+}
+
+status() {
+    total=$(pfctl -t blockor -T show | wc -l)
+    echo 'Total' $total 'IP blocked'
+    echo 'Blocked IP list:'
+    pfctl -t blockor -T show
+    exit 0
+}
+
+[ $# -lt 1 ] && usage
+
+CMD=$1
+shift
+
+case ${CMD} in
+version|-v|--version)
+    version
+    ;;
+help|-h|--help)
+    usage
+    ;;
+init|--init)
+    permission_check
+    init
+    ;;
+start|--start)
+    permission_check
+    start
+    ;;
+stop|--stop)
+    permission_check
+    stop
+    ;;
+add|-a|--add)
+    permission_check
+    add
+    ;;
+delete|-d|--delete)
+    permission_check
+    delete
+    ;;
+list|-l|--list)
+    permission_check
+    list
+    ;;
+status|-s|--status)
+    permission_check
+    status
+    ;;
+*)
+    usage    
+    ;;
+esac
