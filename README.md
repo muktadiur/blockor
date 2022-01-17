@@ -1,6 +1,20 @@
 # Blockor
 Protect BSD Unix computer servers from brute-force attacks. It works on top of the OpenBSD Packet Filter(PF) firewall.
 
+
+## Installation
+```
+git clone https://github.com/muktadiur/blockor.git
+cd blockor
+make install
+```
+
+### To remove blockor
+```
+make uninstall
+```
+
+
 ## Basic Commands
 ```
 Blockor protects FreeBSD, OpenBSD servers from brute-force attacks.
@@ -18,13 +32,32 @@ Use "blockor -v|--version" for version info.
 Use "blockor command -h|--help" for more info.
 ```
 
-```
-make install
-make uninstall
-```
 
+## Example
+
+### To create blockor config file.
 ```
 blockor init
+```
+
+### Add following lines on etc/pf.conf
+```
+table <blockor> persist
+block drop in quick on egress from <blockor> to any
+```
+
+### To start the blockor daemon
+```
 blockor start
+```
+
+### To stop the blockor daemon
+```
 blockor stop
 ```
+
+### To delete an IP from blocked list
+```
+blockor delete 192.168.56.2
+```
+
