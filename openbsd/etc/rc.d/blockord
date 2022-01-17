@@ -1,0 +1,31 @@
+#!/bin/sh
+
+# Copyright (c) 2022-2022, Muktadiur Rahman <muktadiur@gmail.com>
+# All rights reserved.
+
+daemon="/usr/local/libexec/blockor/blockord.sh"
+
+. /etc/rc.d/rc.subr
+
+pexp="${daemon}"
+rc_reload=NO
+
+rc_start() {
+    ${rcexec} "${daemon} &"
+}
+
+rc_stop() {
+    blockor stop
+}
+
+rc_check() {
+    daemon_count=$(ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk | wc -l)
+    if [ $daemon_count -gt 0 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+rc_cmd $1
+

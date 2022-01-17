@@ -1,0 +1,35 @@
+#!/bin/sh
+
+# Copyright (c) 2022-2022, Muktadiur Rahman <muktadiur@gmail.com>
+# All rights reserved.
+
+# PROVIDE: blockor
+# REQUIRE: LOGIN
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+. /usr/local/etc/blockor.conf
+
+name="blockord" 
+rcvar="${name}_enable"
+
+load_rc_config ${name}
+
+: ${blockor_enable:=NO}
+
+start_cmd="blockor_start"
+stop_cmd="blockor_stop"
+restart_cmd="blockor_stop && blockor_start"
+
+blockor_start() {
+    nohup $blockord > $blockor_log_file &
+    echo "${name}(ok)"
+}
+
+blockor_stop() {
+    ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk |  awk '{print $1}' | xargs kill -9
+    ps ax | awk '/tail -n 0 -f/ && /auth.?log/' | grep -v awk | awk '{print $1}' | xargs kill -9
+    echo "${name}(stopped)"
+}
+
+run_rc_command $1

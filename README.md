@@ -5,7 +5,11 @@ Protect BSD Unix computer servers from brute-force attacks. It works on top of t
 ## Installation
 ```
 git clone https://github.com/muktadiur/blockor.git
-cd blockor
+
+cd blockor/freebsd
+or 
+cd blockor/openbsd
+
 make install
 ```
 
@@ -21,13 +25,13 @@ Blockor protects FreeBSD, OpenBSD servers from brute-force attacks.
 Usage:
   blockor command [args]
 Available Commands:
-  init          Create blockor.conf file with a default value.
-  start         Start the blockord.
-  stop          Stop the blockord.
-  add         	Add IP to blocked IP list.
-  delete        Remove IP from blocked IP list.
-  list          List blocked IP list. With '-all' will show the IP list with the failed count.
-  status        Blocked IP list summary.
+  check         Check blockor.conf file and show "pf.conf" config.
+  start         Start the blockord daemon.
+  stop          Stop the blockord daemon.
+  add           Add IP to blocked list.
+  remove        Remove IP from blocked list.
+  list          Show blocked list with the failed count.
+  status        Running or Stopped.
 Use "blockor -v|--version" for version info.
 Use "blockor command -h|--help" for more info.
 ```
@@ -35,9 +39,9 @@ Use "blockor command -h|--help" for more info.
 
 ## Example
 
-### To create blockor config file.
+### To check blockor config file.
 ```
-blockor init
+blockor check
 ```
 
 ### Add following lines on etc/pf.conf
@@ -56,8 +60,8 @@ blockor start
 blockor stop
 ```
 
-### To delete an IP from blocked list
+### To remove an IP from blocked list
 ```
-blockor delete 192.168.56.2
+blockor remove 192.168.56.2
 ```
 
