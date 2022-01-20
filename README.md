@@ -5,19 +5,30 @@ Protect BSD Unix computer servers from brute-force attacks. It works on top of t
 ## Installation
 ```
 git clone https://github.com/muktadiur/blockor.git
-
+```
+#### FreeBSD
+```
 cd blockor/freebsd
-or 
-cd blockor/openbsd
-
 make install
+sysrc blockord_enable=YES # automatic start at boot
+```
+#### OpenBSD
+```
+cd blockor/openbsd
+make install
+rcctl enable blockord # automatic start at boot
 ```
 
-### To remove blockor
+#### Add on etc/pf.conf
+```
+table <blockor> persist
+block drop in quick on egress from <blockor> to any
+```
+
+#### To remove blockor
 ```
 make uninstall
 ```
-
 
 ## Basic Commands
 ```
@@ -25,7 +36,7 @@ Blockor protects FreeBSD, OpenBSD servers from brute-force attacks.
 Usage:
   blockor command [args]
 Available Commands:
-  check         Check blockor.conf file and show "pf.conf" config.
+  check         Check blockor.conf file and show config for pf.conf.
   start         Start the blockord daemon.
   stop          Stop the blockord daemon.
   add           Add IP to blocked list.
@@ -33,35 +44,131 @@ Available Commands:
   list          Show blocked list with the failed count.
   status        Running or Stopped.
 Use "blockor -v|--version" for version info.
-Use "blockor command -h|--help" for more info.
 ```
 
 
 ## Example
 
-### To check blockor config file.
+#### To check config.
 ```
-blockor check
-```
-
-### Add following lines on etc/pf.conf
-```
+root@freebsd:~ # blockor check
+blockor(ok)
+Add these two lines to pf.conf (if not done already):
 table <blockor> persist
 block drop in quick on egress from <blockor> to any
 ```
 
-### To start the blockor daemon
+#### To start blockord
 ```
-blockor start
-```
-
-### To stop the blockor daemon
-```
-blockor stop
+root@freebsd:~ # blockor start
+blockord(ok)
 ```
 
-### To remove an IP from blocked list
+#### To stop blockord
 ```
-blockor remove 192.168.56.2
+root@freebsd:~ # blockor stop
+blockord(stopped)
 ```
 
+#### To remove from blocked list
+```
+root@freebsd:~ # blockor remove 192.168.56.2
+192.168.56.2
+1/1 addresses deleted.
+blockor(removed)
+```
+
+#### To add manually to blocked list
+```
+root@freebsd:~ # blockor add 192.168.56.2
+1/1 addresses added.
+blockor(added)
+```
+
+#### Check status (running/stopped)
+```
+root@freebsd:~ # blockor status
+blockord(running)
+```
+
+#### Show blocked list
+```
+root@freebsd:~ # blockor list
+Total 1 IP(s) blocked
+   192.168.56.2
+count  IP
+  15 192.168.56.2
+   2 192.168.56.20
+   1 192.168.56.21
+```
+
+## /usr/local/etc/blockor.conf
+Change the value of max_tolerance, and search_pattern only.
+Do not change others' values.
+```
+blockord="/usr/local/libexec/blockor/blockord.sh"
+blockor="/usr/local/bin/blockor"
+blockor_file="/tmp/blockor_blacklist"
+blockor_log_file="/var/log/blockord.log"
+search_pattern="Disconnected from authenticating user root|Failed password"
+max_tolerance=10
+```
+
+#### FreeBSD
+```
+auth_file="/var/log/auth.log"
+```
+#### OpenBSD
+```
+auth_file="/var/log/authlog"
+```
+
+#### max_tolerance=10
+```
+IP will be blocked when more than 10 failed activities. Change to any number.
+```
+#### search_pattern
+```
+Add any text pattern with delimiter |
+example: search_pattern="Bad protocol version identification|..other patterns"
+```
+
+
+## Project Structure
+```
+.
+├── LICENSE
+├── README.md
+├── freebsd
+│   ├── Makefile
+│   └── usr
+│       └── local
+│           ├── etc
+│           │   ├── blockor.conf
+│           │   └── rc.d
+│           │       └── blockord
+│           └── share
+│               └── examples
+│                   └── blockor
+│                       └── blockor.example.conf
+├── openbsd
+│   ├── Makefile
+│   ├── etc
+│   │   └── rc.d
+│   │       └── blockord
+│   └── usr
+│       └── local
+│           ├── etc
+│           │   └── blockor.conf
+│           └── share
+│               └── examples
+│                   └── blockor
+│                       └── blockor.sample.conf
+└── usr
+    └── local
+        ├── bin
+        │   └── blockor
+        └── libexec
+            └── blockor
+                └── blockord.sh
+```
