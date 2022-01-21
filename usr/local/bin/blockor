@@ -76,6 +76,9 @@ blockor_stop() {
 blockor_add() {
     IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
     shift
+
+    check_whitelisted $IP
+
     if [ -z $IP ]; then
         echo 'blockor(invalid IP)'
         exit 1
@@ -84,6 +87,15 @@ blockor_add() {
         echo 'blockor(added)'
     fi
     exit 0
+}
+
+check_whitelisted() {
+    for white_ip in $(echo $blockor_whitelist); do
+        if [ ${1} == "${white_ip}" ]; then
+            echo 'blockor(whitelisted. skipped)'
+            exit 1
+        fi
+    done
 }
 
 blockor_remove() {

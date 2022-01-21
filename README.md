@@ -83,6 +83,11 @@ blockor(removed)
 root@freebsd:~ # blockor add 192.168.56.2
 1/1 addresses added.
 blockor(added)
+
+whitelisted IP will be skipped.
+
+root@freebsd:~ # blockor add 192.168.56.20
+blockor(whitelisted. skipped)
 ```
 
 #### Check status (running/stopped)
@@ -98,7 +103,7 @@ Total 1 IP(s) blocked
    192.168.56.2
 count  IP
   15 192.168.56.2
-   2 192.168.56.20
+   2 192.168.56.30
    1 192.168.56.21
 ```
 
@@ -110,6 +115,7 @@ blockord="/usr/local/libexec/blockor/blockord.sh"
 blockor="/usr/local/bin/blockor"
 blockor_file="/tmp/blockor_blacklist"
 blockor_log_file="/var/log/blockord.log"
+blockor_whitelist="192.168.56.20 192.168.56.102"
 search_pattern="Disconnected from authenticating user root|Failed password"
 max_tolerance=10
 ```
@@ -131,6 +137,12 @@ IP will be blocked when more than 10 failed activities. Change to any number.
 ```
 Add any text pattern with delimiter |
 example: search_pattern="Bad protocol version identification|..other patterns"
+```
+#### blockor_whitelist
+```
+IP in blockor_whitelist will be excluded from blocking. Add IP with space-separated.
+blockor_whitelist="192.168.56.20 192.168.56.102"
+
 ```
 
 
