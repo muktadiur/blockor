@@ -1,6 +1,8 @@
 # Blockor
 Protect BSD Unix computer servers from brute-force attacks. It works on top of the OpenBSD Packet Filter(PF) firewall.
 
+## Prerequisites
+- BSD operating system: FreeBSD, OpenBSD with [ Packet Filter( PF ) ](https://www.openbsd.org/faq/pf/filter.html) enabled.
 
 ## Installation
 ```
@@ -24,7 +26,7 @@ make install
 rcctl enable blockord # automatic start at boot
 ```
 
-#### Add on etc/pf.conf
+#### Add on /etc/pf.conf
 ```
 table <blockor> persist
 block drop in quick on egress from <blockor> to any
@@ -58,7 +60,7 @@ Use "blockor -v|--version" for version info.
 ```
 root@freebsd:~ # blockor check
 blockor(ok)
-Add these two lines to pf.conf (if not done already):
+Add these two lines to /etc/pf.conf (if not done already):
 table <blockor> persist
 block drop in quick on egress from <blockor> to any
 ```

@@ -16,7 +16,7 @@ Blockor protects FreeBSD, OpenBSD servers from brute-force attacks.
 Usage:
   blockor command [args]
 Available Commands:
-  check         Check blockor.conf file and show config for pf.conf.
+  check         Check blockor.conf file and show config for /etc/pf.conf.
   start         Start the blockord daemon.
   stop          Stop the blockord daemon.
   add           Add IP to blocked list.
@@ -49,7 +49,7 @@ blockor_check() {
     fi
     echo "blockor(ok)"
     cat <<EOF
-Add these two lines to pf.conf (if not done already):
+Add these two lines to /etc/pf.conf (if not done already):
 table <blockor> persist
 block drop in quick on egress from <blockor> to any
 EOF
