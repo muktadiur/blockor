@@ -6,14 +6,19 @@ Protect BSD Unix computer servers from brute-force attacks. It works on top of t
 ```
 git clone https://github.com/muktadiur/blockor.git
 ```
+
 #### FreeBSD
 ```
+# root|doas|sudo required.
+
 cd blockor/freebsd
 make install
 sysrc blockord_enable=YES # automatic start at boot
 ```
 #### OpenBSD
 ```
+# root|doas|sudo required.
+
 cd blockor/openbsd
 make install
 rcctl enable blockord # automatic start at boot

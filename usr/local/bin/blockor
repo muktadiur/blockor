@@ -116,6 +116,11 @@ blockor_list() {
     total=$(pfctl -t blockor -T show | wc -l)
     echo 'Total' $total 'IP(s) blocked'
     pfctl -t blockor -T show
+
+    if [ ! -f $blockor_file ]; then
+        exit 1
+    fi
+
     echo "count  IP"
     cat $blockor_file | sort | uniq -c | sort -nr
     exit 0
