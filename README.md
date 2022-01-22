@@ -1,6 +1,8 @@
 # Blockor
 Protect BSD Unix computer servers from brute-force attacks. It works on top of the OpenBSD Packet Filter(PF) firewall.
 
+![Blockor](images/blockor.png)
+
 ## Prerequisites
 - BSD operating system: FreeBSD, OpenBSD with [ Packet Filter( PF ) ](https://www.openbsd.org/faq/pf/filter.html) enabled.
 
@@ -43,7 +45,7 @@ Blockor protects FreeBSD, OpenBSD servers from brute-force attacks.
 Usage:
   blockor command [args]
 Available Commands:
-  check         Check blockor.conf file and show config for pf.conf.
+  check         Check blockor.conf file and show config for /etc/pf.conf.
   start         Start the blockord daemon.
   stop          Stop the blockord daemon.
   add           Add IP to blocked list.
@@ -109,14 +111,14 @@ root@freebsd:~ # blockor list
 Total 1 IP(s) blocked
    192.168.56.2
 count  IP
-  15 192.168.56.2
+  11 192.168.56.2
    2 192.168.56.30
    1 192.168.56.21
 ```
 
 ## /usr/local/etc/blockor.conf
-Change the value of max_tolerance, and search_pattern only.
-Do not change others' values.
+Change the value of blockor_whitelist, max_tolerance, and search_pattern.
+Better not to change others' values.
 ```
 blockord="/usr/local/libexec/blockor/blockord.sh"
 blockor="/usr/local/bin/blockor"
