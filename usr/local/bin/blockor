@@ -94,7 +94,12 @@ blockor_remove() {
     IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
     if [ ! -z $IP ]; then
         pfctl -t blockor -q -T delete $IP
-        sed -i '' '/'"${IP}"'$/d' $blockor_file
+        os=$(uname -sr | awk '{print $1}')
+        if [ $os == 'OpenBSD' ]; then
+            sed -i '/'"${IP}"'$/d' $blockor_file
+        else
+            sed -i '' '/'"${IP}"'$/d' $blockor_file
+        fi
     fi
 }
 
