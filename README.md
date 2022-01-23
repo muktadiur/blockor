@@ -50,6 +50,7 @@ Available Commands:
   stop          Stop the blockord daemon.
   add           Add IP to blocked list.
   remove        Remove IP from blocked list.
+  flush         Remove all entries from blocked list.
   list          Show blocked list with the failed count.
   status        Running or Stopped.
 Use "blockor -v|--version" for version info.
@@ -82,21 +83,25 @@ blockord(stopped)
 #### To remove from blocked list
 ```
 root@freebsd:~ # blockor remove 192.168.56.2
-192.168.56.2
-1/1 addresses deleted.
+blockor(removed)
+
+# or if multiple
+root@freebsd:~ # blockor remove 192.168.56.45 192.168.56.151 192.168.56.152
 blockor(removed)
 ```
 
 #### To add manually to blocked list
 ```
 root@freebsd:~ # blockor add 192.168.56.2
-1/1 addresses added.
 blockor(added)
 
-whitelisted IP will be skipped.
+# or if multiple
+root@freebsd:~ # blockor add 192.168.56.45 192.168.56.151 192.168.56.152
+blockor(added)
 
+# whitelisted IP will be skipped.
 root@freebsd:~ # blockor add 192.168.56.20
-blockor(whitelisted. skipped)
+blockor(whitelisted. skipped. 192.168.56.20)
 ```
 
 #### Check status (running/stopped)
@@ -114,6 +119,12 @@ count  IP
   11 192.168.56.2
    2 192.168.56.30
    1 192.168.56.21
+```
+
+#### Remove all entries from blocked list
+```
+root@freebsd:~ # blockor flush
+blockor(flushed)
 ```
 
 ## /usr/local/etc/blockor.conf
@@ -155,7 +166,7 @@ blockor_whitelist="192.168.56.20 192.168.56.102"
 ```
 
 
-## Project Structure
+## Source code structure
 ```
 .
 ├── LICENSE
@@ -172,6 +183,8 @@ blockor_whitelist="192.168.56.20 192.168.56.102"
 │               └── examples
 │                   └── blockor
 │                       └── blockor.example.conf
+├── images
+│   └── blockor.png
 ├── openbsd
 │   ├── Makefile
 │   ├── etc

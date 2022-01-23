@@ -18,7 +18,7 @@ do
 		count=$(echo $row | awk '{print $1}')
 		ip=$(echo $row | awk '{print $2}')
 		if [ $count -ge $max_tolerance ]; then
-			pfctl -t blockor -T add $ip
+			pfctl -t blockor -q -T add $ip
 			echo $(date -u): $ip 'added in blocked IP list.' >> $blockor_log_file
 		fi
 	done

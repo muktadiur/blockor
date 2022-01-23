@@ -4,7 +4,7 @@
 # All rights reserved.
 
 ## version
-version='0.1.0'
+version='0.1.1'
 
 PATH=${PATH}:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 
@@ -21,6 +21,7 @@ Available Commands:
   stop          Stop the blockord daemon.
   add           Add IP to blocked list.
   remove        Remove IP from blocked list.
+  flush         Remove all entries from blocked list.
   list          Show blocked list with the failed count.
   status        Running or Stopped.
 Use "blockor -v|--version" for version information.
@@ -75,40 +76,37 @@ blockor_stop() {
 
 blockor_add() {
     IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
-    shift
-
     check_whitelisted $IP
-
-    if [ -z $IP ]; then
-        echo 'blockor(invalid IP)'
-        exit 1
-    else
-        pfctl -t blockor -T add $IP
-        echo 'blockor(added)'
+    if [ ! -z $IP ]; then
+        pfctl -t blockor -q -T add $IP
     fi
-    exit 0
 }
 
 check_whitelisted() {
     for white_ip in $(echo $blockor_whitelist); do
         if [ ${1} == "${white_ip}" ]; then
-            echo 'blockor(whitelisted. skipped)'
-            exit 1
+            echo 'blockor(whitelisted. skipped.' $white_ip')'
         fi
     done
 }
 
 blockor_remove() {
     IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
-    shift
-    if [ -z $IP ]; then
-        echo 'blockor(invalid IP)'
-        exit 1
-    else
-        pfctl -t blockor -T delete $IP
-        sed -i '' '/'"${IP}"'$/d' $blockor_file
-        echo 'blockor(removed)'
+    if [ ! -z $IP ]; then
+        pfctl -t blockor -q -T delete $IP
+        os=$(uname -sr | awk '{print $1}')
+        if [ $os == 'OpenBSD' ]; then
+            sed -i '/'"${IP}"'$/d' $blockor_file
+        else
+            sed -i '' '/'"${IP}"'$/d' $blockor_file
+        fi
     fi
+}
+
+blockor_flush() {
+    pfctl -t blockor -q -T flush
+    cat /dev/null > $blockor_file
+    echo 'blockor(flushed)'
     exit 0
 }
 
@@ -133,6 +131,14 @@ blockor_status() {
         echo 'blockord(stopped)'
     fi
     exit 0
+}
+
+is_valid_ip() {
+    IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
+    if [ -z $IP ]; then
+        echo 'blockor(invalid IP)'
+        exit 1
+    fi
 }
 
 [ $# -lt 1 ] && usage
@@ -161,11 +167,27 @@ stop|--stop)
     ;;
 add|-a|--add)
     permission_check
-    blockor_add $1
+    is_valid_ip $1
+    while [ ! -z $1 ]; do
+        blockor_add $1
+        shift
+    done
+    echo 'blockor(added)'
+    exit 0
     ;;
 remove|-r|--remove)
     permission_check
-    blockor_remove $1
+    is_valid_ip $1
+    while [ ! -z $1 ]; do
+        blockor_remove $1
+        shift
+    done
+    echo 'blockor(removed)'
+    exit 0
+    ;;
+flush|-f|--flush)
+    permission_check
+    blockor_flush
     ;;
 list|-l|--list)
     permission_check
