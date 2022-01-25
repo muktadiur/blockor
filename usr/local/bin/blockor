@@ -48,9 +48,14 @@ blockor_check() {
         echo "example: /usr/local/share/examples/blockor/blockor.example.conf"
         exit 1
     fi
+
+    if [ ! -c "/dev/pf" ]; then
+        echo "blockor(pf not enabled)"
+        exit 1
+    fi
     echo "blockor(ok)"
     cat <<EOF
-Add these two lines to /etc/pf.conf (if not done already):
+Add to /etc/pf.conf and run pfctl -f /etc/pf.conf(if not already done):
 table <blockor> persist
 block drop in quick on egress from <blockor> to any
 EOF
@@ -84,7 +89,7 @@ blockor_add() {
 
 check_whitelisted() {
     for white_ip in $(echo $blockor_whitelist); do
-        if [ ${1} == "${white_ip}" ]; then
+        if [ ${1} = "${white_ip}" ]; then
             echo 'blockor(whitelisted. skipped.' $white_ip')'
         fi
     done
@@ -94,8 +99,9 @@ blockor_remove() {
     IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
     if [ ! -z $IP ]; then
         pfctl -t blockor -q -T delete $IP
-        os=$(uname -sr | awk '{print $1}')
-        if [ $os == 'OpenBSD' ]; then
+        check_blockor_file
+        OS=$(uname -s | tr '[A-Z]' '[a-z]')
+        if [ $OS = 'openbsd' ]; then
             sed -i '/'"${IP}"'$/d' $blockor_file
         else
             sed -i '' '/'"${IP}"'$/d' $blockor_file
@@ -103,8 +109,15 @@ blockor_remove() {
     fi
 }
 
+check_blockor_file() {
+    if [ ! -f $blockor_file ]; then
+        exit 1
+    fi
+}
+
 blockor_flush() {
     pfctl -t blockor -q -T flush
+    check_blockor_file
     cat /dev/null > $blockor_file
     echo 'blockor(flushed)'
     exit 0
@@ -115,9 +128,7 @@ blockor_list() {
     echo 'Total' $total 'IP(s) blocked'
     pfctl -t blockor -T show
 
-    if [ ! -f $blockor_file ]; then
-        exit 1
-    fi
+    check_blockor_file
 
     echo "count  IP"
     cat $blockor_file | sort | uniq -c | sort -nr
@@ -172,7 +183,7 @@ add|-a|--add)
         blockor_add $1
         shift
     done
-    echo 'blockor(added)'
+    echo 'blockor(ok)'
     exit 0
     ;;
 remove|-r|--remove)

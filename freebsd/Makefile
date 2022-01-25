@@ -9,8 +9,8 @@ install:
 uninstall:
 	@echo "Removing blockor"
 	@rm -vf /usr/local/bin/blockor
-	@rm -rvf /usr/local/libexec/blockord.sh
-	@rm -rvf /usr/local/share/examples/blockor/blockor.sample.conf
-	@rm -rvf /usr/local/etc/rc.d/blockord
-	@rm -rvf /usr/local/etc/blockor.conf
+	@rm -vf /usr/local/libexec/blockord.sh
+	@rm -vf /usr/local/etc/rc.d/blockord
+	@rm -vf /usr/local/etc/blockor.conf
+	@rm -rvf /usr/local/share/examples/blockor
 	@echo "Successfully removed"

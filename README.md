@@ -9,26 +9,22 @@ Protect BSD Unix computer servers from brute-force attacks. It works on top of t
 ## Installation
 ```
 git clone https://github.com/muktadiur/blockor.git
-```
 
-#### FreeBSD
-```
 # root|doas|sudo required.
-
-cd blockor/freebsd
+cd blockor
 make install
-sysrc blockord_enable=YES # automatic start at boot
-```
-#### OpenBSD
-```
-# root|doas|sudo required.
-
-cd blockor/openbsd
-make install
-rcctl enable blockord # automatic start at boot
 ```
 
-#### Add on /etc/pf.conf
+#### FreeBSD automatic start at boot
+```
+sysrc blockord_enable=YES
+```
+#### OpenBSD automatic start at boot
+```
+rcctl enable blockord
+```
+
+#### Add on /etc/pf.conf and run pfctl -f /etc/pf.conf
 ```
 table <blockor> persist
 block drop in quick on egress from <blockor> to any
@@ -63,7 +59,7 @@ Use "blockor -v|--version" for version info.
 ```
 root@freebsd:~ # blockor check
 blockor(ok)
-Add these two lines to /etc/pf.conf (if not done already):
+Add to /etc/pf.conf and run pfctl -f /etc/pf.conf(if not already done):
 table <blockor> persist
 block drop in quick on egress from <blockor> to any
 ```
@@ -93,11 +89,11 @@ blockor(removed)
 #### To add manually to blocked list
 ```
 root@freebsd:~ # blockor add 192.168.56.2
-blockor(added)
+blockor(ok)
 
 # or if multiple
 root@freebsd:~ # blockor add 192.168.56.45 192.168.56.151 192.168.56.152
-blockor(added)
+blockor(ok)
 
 # whitelisted IP will be skipped.
 root@freebsd:~ # blockor add 192.168.56.20
@@ -133,7 +129,7 @@ Better not to change others' values.
 ```
 blockord="/usr/local/libexec/blockor/blockord.sh"
 blockor="/usr/local/bin/blockor"
-blockor_file="/tmp/blockor_blacklist"
+blockor_file="/tmp/blockor_blockedlist"
 blockor_log_file="/var/log/blockord.log"
 blockor_whitelist="192.168.56.20 192.168.56.102"
 search_pattern="Disconnected from authenticating user root|Failed password"
@@ -170,9 +166,9 @@ blockor_whitelist="192.168.56.20 192.168.56.102"
 ```
 .
 ├── LICENSE
+├── Makefile
 ├── README.md
 ├── freebsd
-│   ├── Makefile
 │   └── usr
 │       └── local
 │           ├── etc
@@ -186,7 +182,6 @@ blockor_whitelist="192.168.56.20 192.168.56.102"
 ├── images
 │   └── blockor.png
 ├── openbsd
-│   ├── Makefile
 │   ├── etc
 │   │   └── rc.d
 │   │       └── blockord
