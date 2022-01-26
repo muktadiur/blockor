@@ -4,7 +4,7 @@
 # All rights reserved.
 
 ## version
-version='0.1.1'
+version='0.1.2'
 
 PATH=${PATH}:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 
@@ -19,6 +19,9 @@ Available Commands:
   check         Check blockor.conf file and show config for /etc/pf.conf.
   start         Start the blockord daemon.
   stop          Stop the blockord daemon.
+  restart       Restart the blockord daemon.
+  enable        Start the blockord daemon at boot.
+  disable       Not start the blockord daemon at boot.
   add           Add IP to blocked list.
   remove        Remove IP from blocked list.
   flush         Remove all entries from blocked list.
@@ -68,15 +71,13 @@ blockor_start() {
         exit 1
     fi
     nohup $blockord > $blockor_log_file &
-    echo 'blockord(ok)'
-    exit 0
+    echo 'blockord(running)'
 }
 
 blockor_stop() {
     ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk |  awk '{print $1}' | xargs kill -9
     ps ax | awk '/tail -n 0 -f/ && /auth.?log/' | grep -v awk | awk '{print $1}' | xargs kill -9
     echo 'blockord(stopped)'
-    exit 0
 }
 
 blockor_add() {
@@ -135,12 +136,78 @@ blockor_list() {
     exit 0
 }
 
-blockor_status() {
-    if [ $(ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk | wc -l) -gt 0 ]; then
-        echo 'blockord(running)'
-    else
-        echo 'blockord(stopped)'
+freebsd_status() {
+    RC=$(cat /etc/rc.conf | grep blockord_enable | cut -d "=" -f2 | tr '[A-Z]' '[a-z]')
+    case "$RC" in
+    *yes*)
+        echo 'blockord('${1}'.enabled)'
+        ;;
+    *)
+        echo 'blockord('${1}'.disabled)'
+        ;;
+    esac
+}
+
+openbsd_status() {
+    if [ ! -f /etc/rc.conf.local ]; then
+        echo 'blockord('${1}'.disabled)'
+        exit 1
     fi
+
+    RC_LOCAL=$(cat /etc/rc.conf.local | awk '/pkg_scripts/ && /blockord/')
+    case "$RC_LOCAL" in 
+    *blockord*)
+        echo 'blockord('${1}'.enabled)'
+        ;;
+    *)
+        echo 'blockord('${1}'.disabled)'
+        ;;
+    esac
+}
+
+blockor_status() {
+    OS=$(uname -s | tr '[A-Z]' '[a-z]')
+    if [ $(ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk | wc -l) -gt 0 ]; then
+        if [ $OS = 'openbsd' ]; then
+            openbsd_status 'running'
+        else
+            freebsd_status 'running'
+        fi
+    else
+        if [ $OS = 'openbsd' ]; then
+            openbsd_status 'stopped'
+        else
+            freebsd_status 'stopped'
+        fi
+    fi
+    exit 0
+}
+
+blockor_eanble() {
+    OS=$(uname -s | tr '[A-Z]' '[a-z]')
+    if [ $OS = 'openbsd' ]; then
+        rcctl enable blockord
+        echo 'blockord(eanbled)'
+    else
+        sysrc blockord_enable="YES"
+        echo 'blockord(eanbled)'
+    fi
+}
+
+blockor_disable() {
+    OS=$(uname -s | tr '[A-Z]' '[a-z]')
+    if [ $OS = 'openbsd' ]; then
+        rcctl disable blockord
+        echo 'blockord(disabled)'
+    else
+        sysrc blockord_enable="NO"
+        echo 'blockord(disabled)'
+    fi
+}
+
+blockor_restart() {
+    blockor_stop
+    blockor_start
     exit 0
 }
 
@@ -171,10 +238,16 @@ check|--check)
 start|--start)
     permission_check
     blockor_start
+    exit 0
     ;;
 stop|--stop)
     permission_check
     blockor_stop
+    exit 0
+    ;;
+restart|--restart)
+    permission_check
+    blockor_restart
     ;;
 add|-a|--add)
     permission_check
@@ -207,6 +280,14 @@ list|-l|--list)
 status|-s|--status)
     permission_check
     blockor_status
+    ;;
+enable|-e|--enable)
+    permission_check
+    blockor_eanble
+    ;;
+disable|-d|--disable)
+    permission_check
+    blockor_disable
     ;;
 *)
     blockor_usage

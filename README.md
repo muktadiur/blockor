@@ -15,13 +15,13 @@ cd blockor
 make install
 ```
 
-#### FreeBSD automatic start at boot
+#### Start blockord at boot
 ```
-sysrc blockord_enable=YES
-```
-#### OpenBSD automatic start at boot
-```
-rcctl enable blockord
+blockor enable
+
+or 
+sysrc blockord_enable=YES  # FreeBSD
+rcctl enable blockord      # OpenBSD
 ```
 
 #### Add on /etc/pf.conf and run pfctl -f /etc/pf.conf
@@ -44,11 +44,14 @@ Available Commands:
   check         Check blockor.conf file and show config for /etc/pf.conf.
   start         Start the blockord daemon.
   stop          Stop the blockord daemon.
+  restart       Restart the blockord daemon.
+  enable        Start the blockord daemon at boot.
+  disable       Not start the blockord daemon at boot.
   add           Add IP to blocked list.
   remove        Remove IP from blocked list.
   flush         Remove all entries from blocked list.
   list          Show blocked list with the failed count.
-  status        Running or Stopped.
+  status        Running or Stopped (enabled|disabled) 
 Use "blockor -v|--version" for version info.
 ```
 
@@ -57,7 +60,7 @@ Use "blockor -v|--version" for version info.
 
 #### To check config.
 ```
-root@freebsd:~ # blockor check
+bsd# blockor check
 blockor(ok)
 Add to /etc/pf.conf and run pfctl -f /etc/pf.conf(if not already done):
 table <blockor> persist
@@ -66,49 +69,59 @@ block drop in quick on egress from <blockor> to any
 
 #### To start blockord
 ```
-root@freebsd:~ # blockor start
-blockord(ok)
+bsd# blockor start
+blockord(running)
 ```
 
 #### To stop blockord
 ```
-root@freebsd:~ # blockor stop
+bsd# blockor stop
 blockord(stopped)
 ```
 
-#### To remove from blocked list
+#### To restart blockord
 ```
-root@freebsd:~ # blockor remove 192.168.56.2
+bsd# blockor restart
+blockord(stopped)
+blockord(running)
+```
+
+#### To remove an IP from blocked list
+```
+bsd# blockor remove 192.168.56.2
 blockor(removed)
 
 # or if multiple
-root@freebsd:~ # blockor remove 192.168.56.45 192.168.56.151 192.168.56.152
+bsd# blockor remove 192.168.56.45 192.168.56.151 192.168.56.152
 blockor(removed)
 ```
 
-#### To add manually to blocked list
+#### To block(add) an IP manually
 ```
-root@freebsd:~ # blockor add 192.168.56.2
+bsd# blockor add 192.168.56.2
 blockor(ok)
 
 # or if multiple
-root@freebsd:~ # blockor add 192.168.56.45 192.168.56.151 192.168.56.152
+bsd# blockor add 192.168.56.45 192.168.56.151 192.168.56.152
 blockor(ok)
 
 # whitelisted IP will be skipped.
-root@freebsd:~ # blockor add 192.168.56.20
+bsd# blockor add 192.168.56.20
 blockor(whitelisted. skipped. 192.168.56.20)
 ```
 
-#### Check status (running/stopped)
+#### Check status (running|stopped)
 ```
-root@freebsd:~ # blockor status
-blockord(running)
+bsd# blockor status
+blockord(running.enabled)
+
+enabled - will start at boot
+disabled - will not start at boot
 ```
 
 #### Show blocked list
 ```
-root@freebsd:~ # blockor list
+bsd# blockor list
 Total 1 IP(s) blocked
    192.168.56.2
 count  IP
@@ -119,7 +132,7 @@ count  IP
 
 #### Remove all entries from blocked list
 ```
-root@freebsd:~ # blockor flush
+bsd# blockor flush
 blockor(flushed)
 ```
 
@@ -134,15 +147,10 @@ blockor_log_file="/var/log/blockord.log"
 blockor_whitelist="192.168.56.20 192.168.56.102"
 search_pattern="Disconnected from authenticating user root|Failed password"
 max_tolerance=10
-```
 
-#### FreeBSD
-```
-auth_file="/var/log/auth.log"
-```
-#### OpenBSD
-```
-auth_file="/var/log/authlog"
+auth_file="/var/log/auth.log"     # FreeBSD
+auth_file="/var/log/authlog"      # OpenBSD
+
 ```
 
 #### max_tolerance=10
