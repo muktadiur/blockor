@@ -21,5 +21,6 @@ uninstall:
 	@rm -vf /usr/local/bin/blockor
 	@rm -vf /usr/local/libexec/blockord.sh
 	@rm -vf /usr/local/etc/blockor.conf
+	@rm -vf /usr/local/man/man8/blockor.8.gz
 	@rm -rvf /usr/local/share/examples/blockor
 	@echo "Successfully removed"
