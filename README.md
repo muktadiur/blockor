@@ -172,17 +172,20 @@ blockor_whitelist="192.168.56.20 192.168.56.102"
 
 ## Source code structure
 ```
-.
 ├── LICENSE
 ├── Makefile
 ├── README.md
 ├── freebsd
+│   ├── Makefile
 │   └── usr
 │       └── local
 │           ├── etc
 │           │   ├── blockor.conf
 │           │   └── rc.d
 │           │       └── blockord
+│           ├── man
+│           │   └── man8
+│           │       └── blockor.8.gz
 │           └── share
 │               └── examples
 │                   └── blockor
@@ -190,6 +193,7 @@ blockor_whitelist="192.168.56.20 192.168.56.102"
 ├── images
 │   └── blockor.png
 ├── openbsd
+│   ├── Makefile
 │   ├── etc
 │   │   └── rc.d
 │   │       └── blockord
@@ -197,6 +201,9 @@ blockor_whitelist="192.168.56.20 192.168.56.102"
 │       └── local
 │           ├── etc
 │           │   └── blockor.conf
+│           ├── man
+│           │   └── man8
+│           │       └── blockor.8.gz
 │           └── share
 │               └── examples
 │                   └── blockor
@@ -208,4 +215,5 @@ blockor_whitelist="192.168.56.20 192.168.56.102"
         └── libexec
             └── blockor
                 └── blockord.sh
+
 ```
