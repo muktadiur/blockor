@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright (c) 2022-2022, Muktadiur Rahman <muktadiur@gmail.com>
+# Copyright (c) 2022-2023, Muktadiur Rahman <muktadiur@gmail.com>
 # All rights reserved.
 
 daemon="/usr/local/libexec/blockor/blockord.sh"
@@ -19,7 +19,7 @@ rc_stop() {
 }
 
 rc_check() {
-    daemon_count=$(ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk | wc -l)
+    daemon_count=$(pgrep -f "${daemon}" | wc -l)
     if [ $daemon_count -gt 0 ]; then
         return 0
     else

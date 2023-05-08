@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2022-2022, Muktadiur Rahman <muktadiur@gmail.com>
+# Copyright (c) 2022-2023, Muktadiur Rahman <muktadiur@gmail.com>
 # All rights reserved.
 
 . /usr/local/etc/blockor.conf

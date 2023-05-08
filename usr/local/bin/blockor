@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (c) 2022-2022, Muktadiur Rahman <muktadiur@gmail.com>
+# Copyright (c) 2022-2023, Muktadiur Rahman <muktadiur@gmail.com>
 # All rights reserved.
 
 ## version
@@ -9,6 +9,8 @@ version='0.1.2'
 PATH=${PATH}:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 
 . /usr/local/etc/blockor.conf
+
+OS=$(uname -s | tr '[A-Z]' '[a-z]')
 
 blockor_usage() {
     cat << EOF
@@ -66,16 +68,16 @@ exit 0
 }
 
 blockor_start() {
-    if [ $(ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk | wc -l) -gt 0 ]; then
+    if [ $(pgrep -f $blockord | wc -l) -gt 0 ]; then
         echo 'blockord(already running)'
         exit 1
     fi
-    nohup $blockord > $blockor_log_file &
+    nohup $blockord > $blockor_log_file 2>&1 &
     echo 'blockord(running)'
 }
 
 blockor_stop() {
-    ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk |  awk '{print $1}' | xargs kill -9
+    pkill -f $blockord
     ps ax | awk '/tail -n 0 -f/ && /auth.?log/' | grep -v awk | awk '{print $1}' | xargs kill -9
     echo 'blockord(stopped)'
 }
@@ -101,7 +103,6 @@ blockor_remove() {
     if [ ! -z $IP ]; then
         pfctl -t blockor -q -T delete $IP
         check_blockor_file
-        OS=$(uname -s | tr '[A-Z]' '[a-z]')
         if [ $OS = 'openbsd' ]; then
             sed -i '/'"${IP}"'$/d' $blockor_file
         else
@@ -166,8 +167,7 @@ openbsd_status() {
 }
 
 blockor_status() {
-    OS=$(uname -s | tr '[A-Z]' '[a-z]')
-    if [ $(ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk | wc -l) -gt 0 ]; then
+    if [ $(pgrep -f $blockord | wc -l) -gt 0 ]; then
         if [ $OS = 'openbsd' ]; then
             openbsd_status 'running'
         else
@@ -184,7 +184,6 @@ blockor_status() {
 }
 
 blockor_eanble() {
-    OS=$(uname -s | tr '[A-Z]' '[a-z]')
     if [ $OS = 'openbsd' ]; then
         rcctl enable blockord
         echo 'blockord(eanbled)'
@@ -195,7 +194,6 @@ blockor_eanble() {
 }
 
 blockor_disable() {
-    OS=$(uname -s | tr '[A-Z]' '[a-z]')
     if [ $OS = 'openbsd' ]; then
         rcctl disable blockord
         echo 'blockord(disabled)'

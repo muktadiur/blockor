@@ -3,7 +3,6 @@ install:
 	@echo "Installing blockor"
 	@if [ `uname -s | tr 'A-Z' 'a-z'` = "openbsd" ]; then \
 		cp -Rv openbsd/usr / ; \
-		cp -Rv openbsd/etc / ; \
 	else \
 		cp -Rv freebsd/usr / ; \
 	fi
@@ -13,11 +12,7 @@ install:
 .PHONY: uninstall
 uninstall:
 	@echo "Removing blockor"
-	@if [ `uname -s | tr 'A-Z' 'a-z'` = "openbsd" ]; then \
-		rm -vf /etc/rc.d/blockord ; \
-	else \
-		rm -vf /usr/local/etc/rc.d/blockord ; \
-	fi
+	@rm -vf /usr/local/etc/rc.d/blockord
 	@rm -vf /usr/local/bin/blockor
 	@rm -vf /usr/local/libexec/blockord.sh
 	@rm -vf /usr/local/etc/blockor.conf

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright (c) 2022-2022, Muktadiur Rahman <muktadiur@gmail.com>
+# Copyright (c) 2022-2023, Muktadiur Rahman <muktadiur@gmail.com>
 # All rights reserved.
 
 # PROVIDE: blockor
@@ -22,12 +22,12 @@ stop_cmd="blockor_stop"
 restart_cmd="blockor_stop && blockor_start"
 
 blockor_start() {
-    nohup $blockord > $blockor_log_file &
+    nohup $blockord > $blockor_log_file 2>&1 &
     echo "${name}(ok)"
 }
 
 blockor_stop() {
-    ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk |  awk '{print $1}' | xargs kill -9
+    pkill -f $blockord
     ps ax | awk '/tail -n 0 -f/ && /auth.?log/' | grep -v awk | awk '{print $1}' | xargs kill -9
     echo "${name}(stopped)"
 }
