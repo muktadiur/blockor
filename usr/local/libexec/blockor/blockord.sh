@@ -1,31 +1,63 @@
 #!/bin/sh
 #
-# Copyright (c) 2022-2022, Muktadiur Rahman <muktadiur@gmail.com>
+# Copyright (c) 2022-2026, Muktadiur Rahman <muktadiur@gmail.com>
 # All rights reserved.
+#
+# blockord - the blockor log watcher. Tails one or more auth logs, counts
+# failures per source address inside a sliding window, and bans offenders via
+# the PF <blockor> table. A background loop expires bans after bantime.
 
-. /usr/local/etc/blockor.conf
+blockor_conf="/usr/local/etc/blockor.conf"
+blockor_subr="/usr/local/libexec/blockor/blockor.subr"
 
-OS=$(uname -s | tr '[A-Z]' '[a-z]')
+# Refuse to source a config that any non-root user could have tampered with.
+if [ -f "$blockor_conf" ] && [ -n "$(find "$blockor_conf" -perm +022 2>/dev/null)" ]; then
+    echo "blockord(insecure permissions on $blockor_conf; must not be group/world writable)" >&2
+    exit 1
+fi
 
-tail -n 0 -f $auth_file | while read line
-do 
-	echo $line | grep -E "$search_pattern" | grep -oE 'from ([0-9]{1,3}\.){3}[0-9]{1,3}' | awk '{print $2}' >> $blockor_file
+. "$blockor_conf"
+. "${blockor_subr:-/usr/local/libexec/blockor/blockor.subr}"
 
-	for white_ip in $(echo $blockor_whitelist); do
-		if [ $OS = 'openbsd' ]; then
-            sed -i '/'"${white_ip}"'$/d' $blockor_file
-        else
-            sed -i '' '/'"${white_ip}"'$/d' $blockor_file
-        fi
-	done
+bo_ensure_dirs
+bo_load_whitelist
+bo_restore_bans
 
-	cat $blockor_file | sort | uniq -c | sort -nr | while read row
-	do
-		count=$(echo $row | awk '{print $1}')
-		ip=$(echo $row | awk '{print $2}')
-		if [ $count -ge $max_tolerance ]; then
-			pfctl -t blockor -q -T add $ip
-			echo $(date -u): $ip 'added in blocked IP list.' >> $blockor_log_file
-		fi
-	done
+# Files to watch: auth_files (space separated) overrides the single auth_file.
+watch_files=${auth_files:-$auth_file}
+
+rm -f "$fifo_file"
+if ! mkfifo "$fifo_file" 2>/dev/null; then
+    echo "blockord(could not create fifo $fifo_file)" >&2
+    exit 1
+fi
+
+# One `tail -F` per file so log rotation is followed by name and no multi-file
+# header lines leak into the stream. All writers feed the same fifo.
+tail_pids=""
+for f in $watch_files; do
+    tail -n 0 -F "$f" >> "$fifo_file" 2>/dev/null &
+    tail_pids="$tail_pids $!"
 done
+
+# Periodically prune the failure window and release expired bans.
+( while sleep "$expire_interval"; do bo_prune_failures; bo_expire_bans; done ) &
+expire_pid=$!
+
+echo $$ > "$pid_file"
+
+cleanup() {
+    trap - INT TERM EXIT
+    # shellcheck disable=SC2086
+    kill $tail_pids "$expire_pid" 2>/dev/null
+    rm -f "$fifo_file" "$pid_file"
+    bo_log "blockord stopped (pid $$)"
+    exit 0
+}
+trap cleanup INT TERM EXIT
+
+bo_log "blockord started (pid $$): watching ${watch_files}"
+
+while IFS= read -r line; do
+    bo_process_line "$line"
+done < "$fifo_file"
