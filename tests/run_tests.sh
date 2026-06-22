@@ -65,7 +65,7 @@ blockor_whitelist="9.9.9.9 10.0.0.0/8"
 notify_syslog="NO"
 search_pattern="PAM: Authentication error|Failed password|Invalid user|Unable to negotiate with|Bad protocol version identification|Disconnected from authenticating user root"
 
-# shellcheck source=/dev/null
+# shellcheck source=../usr/local/libexec/blockor/blockor.subr
 . "$subr"
 bo_ensure_dirs
 
@@ -75,6 +75,21 @@ bad()  { fail=$((fail+1)); printf '  FAIL - %s\n' "$1"; }
 eq()   { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (want [$3] got [$2])"; fi; }
 yes()  { if "$2" "$3" >/dev/null 2>&1; then ok "$1"; else bad "$1 (expected match)"; fi; }
 no()   { if "$2" "$3" >/dev/null 2>&1; then bad "$1 (expected no match)"; else ok "$1"; fi; }
+
+echo "== portable output glyphs (octal, not \\x) =="
+glyph_hex=$(bo_ok "x" | od -An -tx1 | tr -d ' \n')
+case "$glyph_hex" in
+    *e29c93*) ok "bo_ok emits UTF-8 check mark (U+2713)" ;;
+    *) bad "bo_ok glyph wrong/garbled: $glyph_hex" ;;
+esac
+
+echo "== human-readable durations =="
+eq "seconds" "$(bo_human_time 45)"   "45s"
+eq "minutes" "$(bo_human_time 600)"  "10m"
+eq "hours"   "$(bo_human_time 3600)" "1h"
+eq "hours+min" "$(bo_human_time 3720)" "1h2m"
+eq "days"    "$(bo_human_time 259200)" "3d"
+eq "negative clamps to 0s" "$(bo_human_time -5)" "0s"
 
 echo "== IP extraction =="
 eq "ipv4 from sshd line" \

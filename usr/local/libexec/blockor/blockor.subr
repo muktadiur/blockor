@@ -28,7 +28,11 @@
 
 failures_file="${db_dir}/failures"
 bans_file="${db_dir}/bans"
+# pid_file/fifo_file are part of this library's interface, used by the CLI and
+# daemon that source it (so they look unused when this file is linted alone).
+# shellcheck disable=SC2034
 pid_file="${run_dir}/blockord.pid"
+# shellcheck disable=SC2034
 fifo_file="${run_dir}/blockord.fifo"
 
 # ---- address matching ----
@@ -38,6 +42,44 @@ fifo_file="${run_dir}/blockord.fifo"
 BO_IPV4_RE='((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])'
 BO_IPV6_RE='([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|([0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){1,4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){1,3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){1,2}(:[0-9A-Fa-f]{1,4}){1,5}|[0-9A-Fa-f]{1,4}:(:[0-9A-Fa-f]{1,4}){1,6}|:((:[0-9A-Fa-f]{1,4}){1,7}|:)'
 BO_IP_RE="${BO_IPV4_RE}|${BO_IPV6_RE}"
+
+# ---- output helpers ----
+# Color is emitted only on an interactive terminal and never when NO_COLOR is
+# set or TERM is dumb, so pipes, logs and the daemon stay plain text. stdout and
+# stderr are gated independently (C_* for stdout, E_* for stderr diagnostics).
+# C_WARN/C_B are used by the CLI that sources this library.
+# shellcheck disable=SC2034
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != "dumb" ]; then
+    C_OK=$(printf '\033[32m'); C_ERR=$(printf '\033[31m'); C_WARN=$(printf '\033[33m')
+    C_B=$(printf '\033[1m'); C_R=$(printf '\033[0m')
+else
+    C_OK=''; C_ERR=''; C_WARN=''; C_B=''; C_R=''
+fi
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != "dumb" ]; then
+    E_ERR=$(printf '\033[31m'); E_WARN=$(printf '\033[33m'); E_R=$(printf '\033[0m')
+else
+    E_ERR=''; E_WARN=''; E_R=''
+fi
+
+bo_err()  { printf '%sblockor: error:%s %s\n'   "$E_ERR"  "$E_R" "$*" >&2; }
+bo_warn() { printf '%sblockor: warning:%s %s\n' "$E_WARN" "$E_R" "$*" >&2; }
+bo_ok()   { printf '  %s\342\234\223%s  %s\n' "$C_OK"  "$C_R" "$*"; }
+bo_bad()  { printf '  %s\342\234\227%s  %s\n' "$C_ERR" "$C_R" "$*"; }
+
+# Render a number of seconds as a compact human duration (e.g. 45s, 52m, 1h, 3d2h).
+bo_human_time() {
+    _s=$1
+    [ "$_s" -lt 0 ] 2>/dev/null && _s=0
+    if [ "$_s" -lt 60 ]; then printf '%ds' "$_s"; return; fi
+    if [ "$_s" -lt 3600 ]; then printf '%dm' "$(( _s / 60 ))"; return; fi
+    if [ "$_s" -lt 86400 ]; then
+        _h=$(( _s / 3600 )); _m=$(( (_s % 3600) / 60 ))
+        if [ "$_m" -eq 0 ]; then printf '%dh' "$_h"; else printf '%dh%dm' "$_h" "$_m"; fi
+        return
+    fi
+    _d=$(( _s / 86400 )); _h=$(( (_s % 86400) / 3600 ))
+    if [ "$_h" -eq 0 ]; then printf '%dd' "$_d"; else printf '%dd%dh' "$_d" "$_h"; fi
+}
 
 bo_now() {
     date -u +%s

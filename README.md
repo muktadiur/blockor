@@ -17,7 +17,8 @@ attempt completes a normal TCP connection and only the log shows the failure.
 - Watch **multiple log sources** at once (`auth_files`).
 - **Notifications** on ban/unban: syslog, email, or a custom command.
 - Bans **persist across reboots**.
-- Follows logs by name, so **log rotation** does not stop detection.
+- Follows logs across **rotation** by name on FreeBSD (`tail -F`); on OpenBSD
+  (`tail -f`), restart blockor after a log rotation.
 
 ## Prerequisites
 - FreeBSD or OpenBSD with [Packet Filter (PF)](https://www.openbsd.org/faq/pf/filter.html) enabled.
@@ -86,50 +87,63 @@ blockor command [args]
 
 ## Examples
 
+Output uses ✓/✗ markers and color on an interactive terminal, and plain text
+when piped or redirected (also honors `NO_COLOR`). Errors and warnings go to
+stderr.
+
 ```
 # Verify configuration and PF wiring
 bsd# blockor check
-blockor(pf table <blockor> ok)
-blockor(pf rule ok)
-blockor(ok)
+Checking blockor configuration
+
+  ✓  pf enabled
+  ✓  table <blockor> loaded
+  ✓  blocking rule present
+  ✓  log readable  /var/log/auth.log
+
+All checks passed.
 
 # Start / stop / reload (reload keeps the ban list)
 bsd# blockor start
-blockord(running)
+Started blockord (pid 4123).
 bsd# blockor reload
-blockord(stopped)
-blockord(running)
+Stopped blockord.
+Started blockord (pid 4140).
 
 # Block manually (IPv4 or IPv6, one or many). Whitelisted IPs are skipped.
 bsd# blockor add 192.168.56.2 2001:db8::1
-blockor(ok)
+Blocked 2 address(es): 192.168.56.2, 2001:db8::1
 bsd# blockor add 192.168.56.20
-blockor(whitelisted. skipped. 192.168.56.20)
+Skipped (whitelisted): 192.168.56.20
 
 # Unblock
 bsd# blockor remove 192.168.56.2
+Unblocked 1 address(es): 192.168.56.2
 
 # What is blocked right now, with remaining ban time
 bsd# blockor list
-Total 2 IP(s) blocked
-IP                                          FAILS   EXPIRES_IN
-203.0.113.7                                    14        3120s
-192.168.56.2                                    0    permanent
+2 address(es) blocked
+
+ADDRESS                                  FAILURES   EXPIRES IN
+203.0.113.7                                    14   52m
+2001:db8::dead                                  3   59m
+192.168.56.2                                    -   permanent
 
 # Busiest offenders in the current window
 bsd# blockor top
-Top offenders (last 600s):
-count  IP
-  14 203.0.113.7
-   3 198.51.100.9
+Top offenders — last 10m
+
+FAILURES   ADDRESS
+      14   203.0.113.7
+       3   198.51.100.9
 
 # Status
 bsd# blockor status
-blockord(running.enabled)
+●  blockord — running   (enabled at boot, pid 4140)
 
 # Remove everything
 bsd# blockor flush
-blockor(flushed)
+Flushed — removed 3 address(es) from the block list.
 ```
 
 ## Configuration: /usr/local/etc/blockor.conf

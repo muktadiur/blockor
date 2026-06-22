@@ -11,12 +11,22 @@ blockor_conf="/usr/local/etc/blockor.conf"
 blockor_subr="/usr/local/libexec/blockor/blockor.subr"
 
 # Refuse to source a config that any non-root user could have tampered with.
-if [ -f "$blockor_conf" ] && [ -n "$(find "$blockor_conf" -perm +022 2>/dev/null)" ]; then
-    echo "blockord(insecure permissions on $blockor_conf; must not be group/world writable)" >&2
-    exit 1
+# (portable check: ls perm string, group-write at col 6 or other-write at col 9.
+# ls is fine here - the path is fixed; find -perm +mode is not portable to OpenBSD.)
+if [ -f "$blockor_conf" ]; then
+    # shellcheck disable=SC2012
+    _perm=$(ls -ld "$blockor_conf" 2>/dev/null | cut -c1-10)
+    case "$_perm" in
+    ?????w????|????????w?)
+        printf 'blockord: error: %s is group/world writable; refusing to run\n' "$blockor_conf" >&2
+        exit 1
+        ;;
+    esac
 fi
 
+# shellcheck source=/dev/null
 . "$blockor_conf"
+# shellcheck source=blockor.subr
 . "${blockor_subr:-/usr/local/libexec/blockor/blockor.subr}"
 
 bo_ensure_dirs
@@ -32,11 +42,19 @@ if ! mkfifo "$fifo_file" 2>/dev/null; then
     exit 1
 fi
 
-# One `tail -F` per file so log rotation is followed by name and no multi-file
-# header lines leak into the stream. All writers feed the same fifo.
+# Follow flag: FreeBSD's tail has -F (follow by name across log rotation);
+# OpenBSD's tail only has -f, so fall back to it there.
+case "$(uname -s)" in
+OpenBSD) tail_follow='-f' ;;
+*)       tail_follow='-F' ;;
+esac
+
+# One tail per file (so no multi-file header lines leak into the stream); all
+# writers feed the same fifo.
 tail_pids=""
 for f in $watch_files; do
-    tail -n 0 -F "$f" >> "$fifo_file" 2>/dev/null &
+    # shellcheck disable=SC2086
+    tail -n 0 $tail_follow "$f" >> "$fifo_file" 2>/dev/null &
     tail_pids="$tail_pids $!"
 done
 

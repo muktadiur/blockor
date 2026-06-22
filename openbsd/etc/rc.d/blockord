@@ -3,8 +3,12 @@
 # Copyright (c) 2022-2026, Muktadiur Rahman <muktadiur@gmail.com>
 # All rights reserved.
 
+# pexp/rc_reload are consumed by the rc.subr framework, not this script.
+# shellcheck disable=SC2034
+
 daemon="/usr/local/libexec/blockor/blockord.sh"
 
+# shellcheck source=/dev/null
 . /etc/rc.d/rc.subr
 
 pexp="/bin/sh ${daemon}"
@@ -26,4 +30,4 @@ rc_check() {
     fi
 }
 
-rc_cmd $1
+rc_cmd "$1"

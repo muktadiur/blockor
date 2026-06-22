@@ -22,9 +22,15 @@ All notable changes to blockor are documented here.
 - **Persistent bans** survive a reboot (state moved to `/var/db/blockor`).
 - Test harness (`tests/run_tests.sh`) and CI (shellcheck + tests).
 - Shared library `blockor.subr` used by both the CLI and the daemon.
+- Redesigned, readable command output: `✓`/`✗` markers, a `●` status line,
+  aligned tables, and human-readable durations (`52m`, `1h`, `3d`). Color is
+  used only on an interactive terminal (honors `NO_COLOR`); pipes and logs stay
+  plain. Errors and warnings now go to stderr as `blockor: error: ...`.
 
 ### Fixed
-- `tail -F` (follow by name) so detection keeps working after log rotation.
+- `tail -F` (follow by name) on FreeBSD so detection keeps working after log
+  rotation. OpenBSD's `tail` has no `-F`, so it uses `-f` there (restart blockor
+  after a rotation on OpenBSD).
 - The daemon no longer re-scans the whole history and re-adds every banned IP on
   every log line; it evaluates only the current address and skips IPs already in
   the table.

@@ -7,6 +7,9 @@
 # REQUIRE: pf LOGIN
 # KEYWORD: shutdown
 
+# rcvar and *_cmd are consumed by the rc.subr framework, not this script.
+# shellcheck disable=SC2034
+# shellcheck source=/dev/null
 . /etc/rc.subr
 
 name="blockord"
