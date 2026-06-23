@@ -82,6 +82,7 @@ blockor command [args]
   flush         Remove all entries from the blocked list.
   list          Show blocked IPs with failure count and time left.
   top           Show top offenders seen within the findtime window.
+  test [log]    Dry run: show what would be banned from a log, change nothing.
   status        Running or Stopped (enabled|disabled).
 ```
 
@@ -146,6 +147,40 @@ bsd# blockor flush
 Flushed — removed 3 address(es) from the block list.
 ```
 
+## Before you go live: dry run
+
+`blockor test` scans a log and shows exactly what *would* be banned with your
+current `search_pattern`, `max_tolerance`, and whitelist — without touching PF or
+any state. Use it to tune your settings before starting the daemon.
+
+```
+bsd# blockor test /var/log/auth.log
+Dry run — /var/log/auth.log
+Would ban at >= 10 failures (whole-file totals; no changes made).
+
+  VERDICT             FAILS   ADDRESS
+  BAN                    14   203.0.113.7
+  skip (whitelist)       11   198.51.100.9
+  no                      1   203.0.113.40
+
+1 of 3 address(es) would be banned.
+```
+
+## Lock-out safety
+
+By default blockor **never auto-bans an address that has a live SSH session**, so
+a noisy reconnect or a misconfigured pattern can't kick you off your own box:
+
+```sh
+protect_active_ssh="YES"   # default; set NO to disable
+ssh_port=22                # local SSH port checked for active sessions
+```
+
+This is a safety net, not a substitute for whitelisting your management network
+(`blockor_whitelist="10.0.0.0/8 ..."`). It applies to automatic bans only;
+`blockor add` always blocks what you tell it to. Manual `blockor add` entries are
+also always permanent.
+
 ## Configuration: /usr/local/etc/blockor.conf
 The file is sourced as `/bin/sh`; keep it root-owned and not group/world
 writable (blockor refuses to run otherwise).
@@ -161,6 +196,9 @@ bantime=3600            # ban duration in seconds; 0 = permanent
 expire_interval=60      # how often (seconds) expired bans are released
 
 blockor_whitelist="192.168.56.20 10.0.0.0/8 2001:db8::/32"
+
+protect_active_ssh="YES"  # never auto-ban an IP with a live SSH session
+ssh_port=22               # local SSH port to check for active sessions
 
 notify_syslog="YES"     # log bans/unbans via logger(1)
 notify_email=""         # email address; requires mail(1)

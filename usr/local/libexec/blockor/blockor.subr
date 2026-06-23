@@ -22,6 +22,8 @@
 : "${notify_syslog:=YES}"
 : "${notify_email:=}"
 : "${notify_command:=}"
+: "${protect_active_ssh:=YES}"
+: "${ssh_port:=22}"
 : "${pf_table:=blockor}"
 : "${pf_whitelist_table:=blockor_white}"
 : "${search_pattern:=PAM: Authentication error|Failed password|Invalid user|Unable to negotiate with|Bad protocol version identification|Disconnected from authenticating user root}"
@@ -275,6 +277,36 @@ bo_restore_bans() {
     mv "$_tmp" "$bans_file"
 }
 
+# True if $1 currently has an established connection to the local SSH port.
+# Best-effort lock-out guard: returns 1 (not active) when it cannot tell, so it
+# never interferes with normal banning. Disabled when protect_active_ssh is off.
+bo_is_active_ssh_peer() {
+    _ip=$1
+    case "$protect_active_ssh" in
+        [Yy]*|1) ;;
+        *) return 1 ;;
+    esac
+    netstat -n -p tcp 2>/dev/null | awk -v ip="$_ip" -v lport=".${ssh_port}" '
+        /ESTABLISHED/ {
+            local = $4; foreign = $5
+            if (substr(local, length(local) - length(lport) + 1) == lport) {
+                sub(/\.[0-9]+$/, "", foreign)
+                if (foreign == ip) found = 1
+            }
+        }
+        END { exit(found ? 0 : 1) }
+    '
+}
+
+# Report "<count> <ip>" lines (most failures first) for a log file, using the
+# same pattern matching and IP extraction as live detection. No side effects;
+# used by `blockor test` (dry run).
+bo_dryrun_counts() {
+    grep -E "$search_pattern" "$1" 2>/dev/null \
+        | while IFS= read -r _l; do bo_extract_ip "$_l"; done \
+        | grep -v '^$' | sort | uniq -c | sort -rn
+}
+
 # Handle one raw log line: match pattern, extract IP, skip whitelisted/already
 # banned, record the failure, and ban once the window count crosses the limit.
 bo_process_line() {
@@ -287,6 +319,11 @@ bo_process_line() {
     bo_record_failure "$_ip"
     _count=$(bo_window_count "$_ip")
     if [ "$_count" -ge "$max_tolerance" ]; then
+        # Never auto-ban an address with a live SSH session (lock-out guard).
+        if bo_is_active_ssh_peer "$_ip"; then
+            bo_log "skipped ban of ${_ip} (active SSH session)"
+            return 0
+        fi
         bo_ban "$_ip" "$_count"
     fi
     return 0

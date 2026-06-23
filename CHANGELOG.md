@@ -2,6 +2,17 @@
 
 All notable changes to blockor are documented here.
 
+## [Unreleased]
+
+### Added
+- **`blockor test [logfile]`** — a dry run that scans a log and shows which
+  addresses would be banned with the current pattern, threshold, and whitelist,
+  without touching PF or any state. Use it to tune settings before going live.
+- **Lock-out safety** (`protect_active_ssh`, default on) — blockor never
+  auto-bans an address that currently has a live SSH session, so a noisy
+  reconnect or an over-broad pattern can't lock you out of your own box. The
+  SSH port is configurable via `ssh_port`.
+
 ## [0.2.0] - 2026-06-23
 
 ### Added

@@ -58,6 +58,7 @@ Commands:
   flush         Remove all entries from the block list.
   list          Show blocked addresses with failure count and time left.
   top           Show top offenders within the findtime window.
+  test [log]    Dry run: show what would be banned from a log, change nothing.
   status        Show whether the daemon is running and enabled at boot.
 
 Run "blockor --version" for version information.
@@ -273,6 +274,42 @@ blockor_top() {
     exit 0
 }
 
+blockor_test() {
+    _file=${1:-$auth_file}
+    if [ ! -r "$_file" ]; then
+        bo_err "cannot read log file: $_file"
+        exit 1
+    fi
+    bo_load_whitelist
+    printf '%sDry run%s — %s\n' "$C_B" "$C_R" "$_file"
+    printf 'Would ban at >= %s failures (whole-file totals; no changes made).\n\n' "$max_tolerance"
+    printf '%s  %-16s %8s   %s%s\n' "$C_B" "VERDICT" "FAILS" "ADDRESS" "$C_R"
+    _counts=$(bo_dryrun_counts "$_file")
+    _would=0
+    _total=0
+    while read -r _c _ip; do
+        [ -n "$_ip" ] || continue
+        _total=$((_total + 1))
+        if bo_is_whitelisted "$_ip"; then
+            _v="skip (whitelist)"
+        elif [ "$_c" -ge "$max_tolerance" ]; then
+            _v="BAN"
+            _would=$((_would + 1))
+        else
+            _v="no"
+        fi
+        printf '  %-16s %8s   %s\n' "$_v" "$_c" "$_ip"
+    done <<EOF
+$_counts
+EOF
+    if [ "$_total" -eq 0 ]; then
+        printf 'No matching failures found.\n'
+    else
+        printf '\n%s%d of %d address(es) would be banned.%s\n' "$C_B" "$_would" "$_total" "$C_R"
+    fi
+    exit 0
+}
+
 freebsd_boot_state() {
     RC=$(grep blockord_enable /etc/rc.conf 2>/dev/null | cut -d "=" -f2 | tr '[:upper:]' '[:lower:]')
     case "$RC" in
@@ -378,6 +415,10 @@ list|-l|--list)
 top|-t|--top)
     permission_check
     blockor_top
+    ;;
+test|--test|--dry-run)
+    permission_check
+    blockor_test "$1"
     ;;
 status|-s|--status)
     permission_check

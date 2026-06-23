@@ -49,7 +49,15 @@ chmod +x "$bindir/pfctl"
 printf '#!/bin/sh\nexit 0\n' > "$bindir/logger"; chmod +x "$bindir/logger"
 printf '#!/bin/sh\nexit 0\n' > "$bindir/mail"; chmod +x "$bindir/mail"
 
-export PFSTUB_DIR
+# stub netstat: prints the controllable contents of $NETSTAT_OUT
+NETSTAT_OUT="$work/netstat.out"; : > "$NETSTAT_OUT"
+cat > "$bindir/netstat" <<'STUB'
+#!/bin/sh
+cat "${NETSTAT_OUT:-/dev/null}"
+STUB
+chmod +x "$bindir/netstat"
+
+export PFSTUB_DIR NETSTAT_OUT
 PATH="$bindir:$PATH"
 export PATH
 
@@ -159,6 +167,38 @@ printf '%s %s\n' "$(bo_now)" "203.0.113.210" >> "$failures_file"
 bo_prune_failures
 eq "stale failure pruned, recent kept" \
    "$(grep -c '203.0.113.210' "$failures_file")" "1"
+
+echo "== active SSH session detection =="
+printf 'tcp4 0 0 10.0.0.1.22 203.0.113.7.51000 ESTABLISHED\n' > "$NETSTAT_OUT"
+ssh_port=22
+protect_active_ssh="YES"
+yes "active ssh peer detected"        bo_is_active_ssh_peer "203.0.113.7"
+no  "non-peer not detected"           bo_is_active_ssh_peer "203.0.113.8"
+protect_active_ssh="NO"
+no  "respects protect_active_ssh=NO"  bo_is_active_ssh_peer "203.0.113.7"
+protect_active_ssh="YES"
+
+echo "== lock-out guard: active session not auto-banned =="
+printf 'tcp4 0 0 10.0.0.1.22 198.51.100.50.40000 ESTABLISHED\n' > "$NETSTAT_OUT"
+SL='Jun 23 01:44:30 host sshd[1]: Failed password for root from 198.51.100.50 port 22'
+i=0; while [ $i -lt 5 ]; do bo_process_line "$SL"; i=$((i+1)); done
+no  "attacker with live session not banned" bo_is_banned "198.51.100.50"
+: > "$NETSTAT_OUT"   # session ends
+bo_process_line "$SL"
+yes "banned once session is gone"           bo_is_banned "198.51.100.50"
+
+echo "== dry-run scan (no side effects) =="
+dlog="$work/dry.log"
+{
+  echo "Jun 23 01:00:00 h sshd[1]: Failed password for root from 203.0.113.7 port 22"
+  echo "Jun 23 01:00:01 h sshd[1]: Failed password for root from 203.0.113.7 port 22"
+  echo "Jun 23 01:00:02 h sshd[1]: Accepted password for u from 203.0.113.9 port 22"
+  echo "Jun 23 01:00:03 h sshd[1]: Failed password for root from 198.51.100.9 port 22"
+} > "$dlog"
+counts=$(bo_dryrun_counts "$dlog")
+eq "dry-run top offender"  "$(printf '%s\n' "$counts" | head -1 | awk '{print $2}')" "203.0.113.7"
+eq "dry-run top count"     "$(printf '%s\n' "$counts" | head -1 | awk '{print $1}')" "2"
+case "$counts" in *203.0.113.9*) bad "accepted login wrongly counted" ;; *) ok "accepted login not counted" ;; esac
 
 echo
 echo "Passed: $pass  Failed: $fail"
