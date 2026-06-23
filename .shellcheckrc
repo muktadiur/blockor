@@ -1,0 +1,6 @@
+# Resolve `source=` directives relative to each script's own directory, and
+# allow following them into the shared library, so variable-origin checks
+# (SC2154/SC2034) stay meaningful instead of firing on every config/lib
+# variable. Run shellcheck with -x to enable following.
+external-sources=true
+source-path=SCRIPTDIR
