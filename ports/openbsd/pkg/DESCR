@@ -1,0 +1,13 @@
+Blockor is a lightweight, dependency-free daemon that protects FreeBSD and
+OpenBSD servers from brute-force attacks. It watches your authentication logs
+and blocks offenders through the PF firewall.
+
+Features:
+- Sliding detection window (findtime) and auto-expiring bans (bantime)
+- IPv4 and IPv6 detection, banning and whitelisting
+- CIDR whitelist
+- Watch multiple log sources at once
+- Notifications on ban/unban (syslog, email, or a custom command)
+- Bans persist across reboots
+
+It is a small set of /bin/sh scripts with no external dependencies.

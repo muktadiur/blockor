@@ -1,10 +1,27 @@
 # Blockor
-Protect BSD Unix computer servers from brute-force attacks. It works on top of the OpenBSD Packet Filter(PF) firewall.
+Protect FreeBSD and OpenBSD servers from brute-force attacks. Blockor watches
+your auth logs, counts failed attempts per source address inside a time window,
+and blocks offenders using the OpenBSD Packet Filter (PF) `<blockor>` table.
 
 ![Blockor](images/blockor.png)
 
+It is a small, dependency-free set of `/bin/sh` scripts — no Python, no extra
+packages. It complements PF's native connection-rate limiting: rate limiting
+catches floods, while blockor catches *credential* brute-force where each
+attempt completes a normal TCP connection and only the log shows the failure.
+
+## Features
+- Sliding **detection window** (`findtime`) and **auto-expiring bans** (`bantime`).
+- **IPv4 and IPv6** detection, banning and whitelisting.
+- **CIDR whitelist** (e.g. keep your office `10.0.0.0/8` safe).
+- Watch **multiple log sources** at once (`auth_files`).
+- **Notifications** on ban/unban: syslog, email, or a custom command.
+- Bans **persist across reboots**.
+- Follows logs across **rotation** by name on FreeBSD (`tail -F`); on OpenBSD
+  (`tail -f`), restart blockor after a log rotation.
+
 ## Prerequisites
-- BSD operating system: FreeBSD, OpenBSD with [ Packet Filter( PF ) ](https://www.openbsd.org/faq/pf/filter.html) enabled.
+- FreeBSD or OpenBSD with [Packet Filter (PF)](https://www.openbsd.org/faq/pf/filter.html) enabled.
 
 ## Installation
 ```
@@ -15,205 +32,203 @@ cd blockor
 make install
 ```
 
-#### Start blockord at boot
-```
-blockor enable
-
-or 
-sysrc blockord_enable=YES  # FreeBSD
-rcctl enable blockord      # OpenBSD
-```
-
-#### Add on /etc/pf.conf and run pfctl -f /etc/pf.conf
+### 1. Add the PF table and rule to /etc/pf.conf
 ```
 table <blockor> persist
 block drop in quick on egress from <blockor> to any
 ```
+Then reload PF:
+```
+pfctl -f /etc/pf.conf
+```
 
-#### To remove blockor
+### 2. Verify the setup
+```
+blockor check
+```
+`check` warns loudly if the `<blockor>` table or rule is not actually loaded, so
+you are never silently unprotected.
+
+### 3. Start at boot and run
+```
+blockor enable
+blockor start
+
+# enable is equivalent to:
+sysrc blockord_enable=YES   # FreeBSD
+rcctl enable blockord       # OpenBSD
+```
+
+### Uninstall
 ```
 make uninstall
 ```
+State in `/var/db/blockor` and the log in `/var/log/blockord.log` are kept; remove
+them by hand if you no longer want the history.
 
-## Basic Commands
+## Commands
 ```
-Blockor protects FreeBSD, OpenBSD servers from brute-force attacks.
-Usage:
-  blockor command [args]
-Available Commands:
-  check         Check blockor.conf file and show config for /etc/pf.conf.
+blockor command [args]
+
+  check         Check blockor.conf and the PF setup, show config for /etc/pf.conf.
   start         Start the blockord daemon.
   stop          Stop the blockord daemon.
   restart       Restart the blockord daemon.
+  reload        Restart the daemon, keeping the current ban list.
   enable        Start the blockord daemon at boot.
-  disable       Not start the blockord daemon at boot.
-  add           Add IP to blocked list.
-  remove        Remove IP from blocked list.
-  flush         Remove all entries from blocked list.
-  list          Show blocked list with the failed count.
-  status        Running or Stopped (enabled|disabled) 
-Use "blockor -v|--version" for version info.
+  disable       Do not start the blockord daemon at boot.
+  add           Add IP(s) to the blocked list (permanent).
+  remove        Remove IP(s) from the blocked list.
+  flush         Remove all entries from the blocked list.
+  list          Show blocked IPs with failure count and time left.
+  top           Show top offenders seen within the findtime window.
+  status        Running or Stopped (enabled|disabled).
 ```
 
+## Examples
 
-## Example
+Output uses ✓/✗ markers and color on an interactive terminal, and plain text
+when piped or redirected (also honors `NO_COLOR`). Errors and warnings go to
+stderr.
 
-#### To check config.
 ```
+# Verify configuration and PF wiring
 bsd# blockor check
-blockor(ok)
-Add to /etc/pf.conf and run pfctl -f /etc/pf.conf(if not already done):
-table <blockor> persist
-block drop in quick on egress from <blockor> to any
-```
+Checking blockor configuration
 
-#### To start blockord
-```
+  ✓  pf enabled
+  ✓  table <blockor> loaded
+  ✓  blocking rule present
+  ✓  log readable  /var/log/auth.log
+
+All checks passed.
+
+# Start / stop / reload (reload keeps the ban list)
 bsd# blockor start
-blockord(running)
-```
+Started blockord (pid 4123).
+bsd# blockor reload
+Stopped blockord.
+Started blockord (pid 4140).
 
-#### To stop blockord
-```
-bsd# blockor stop
-blockord(stopped)
-```
-
-#### To restart blockord
-```
-bsd# blockor restart
-blockord(stopped)
-blockord(running)
-```
-
-#### To remove an IP from blocked list
-```
-bsd# blockor remove 192.168.56.2
-blockor(removed)
-
-# or if multiple
-bsd# blockor remove 192.168.56.45 192.168.56.151 192.168.56.152
-blockor(removed)
-```
-
-#### To block(add) an IP manually
-```
-bsd# blockor add 192.168.56.2
-blockor(ok)
-
-# or if multiple
-bsd# blockor add 192.168.56.45 192.168.56.151 192.168.56.152
-blockor(ok)
-
-# whitelisted IP will be skipped.
+# Block manually (IPv4 or IPv6, one or many). Whitelisted IPs are skipped.
+bsd# blockor add 192.168.56.2 2001:db8::1
+Blocked 2 address(es): 192.168.56.2, 2001:db8::1
 bsd# blockor add 192.168.56.20
-blockor(whitelisted. skipped. 192.168.56.20)
-```
+Skipped (whitelisted): 192.168.56.20
 
-#### Check status (running|stopped)
-```
-bsd# blockor status
-blockord(running.enabled)
+# Unblock
+bsd# blockor remove 192.168.56.2
+Unblocked 1 address(es): 192.168.56.2
 
-enabled - will start at boot
-disabled - will not start at boot
-```
-
-#### Show blocked list
-```
+# What is blocked right now, with remaining ban time
 bsd# blockor list
-Total 1 IP(s) blocked
-   192.168.56.2
-count  IP
-  11 192.168.56.2
-   2 192.168.56.30
-   1 192.168.56.21
-```
+2 address(es) blocked
 
-#### Remove all entries from blocked list
-```
+ADDRESS                                  FAILURES   EXPIRES IN
+203.0.113.7                                    14   52m
+2001:db8::dead                                  3   59m
+192.168.56.2                                    -   permanent
+
+# Busiest offenders in the current window
+bsd# blockor top
+Top offenders — last 10m
+
+FAILURES   ADDRESS
+      14   203.0.113.7
+       3   198.51.100.9
+
+# Status
+bsd# blockor status
+●  blockord — running   (enabled at boot, pid 4140)
+
+# Remove everything
 bsd# blockor flush
-blockor(flushed)
+Flushed — removed 3 address(es) from the block list.
 ```
 
-## /usr/local/etc/blockor.conf
-Change the value of blockor_whitelist, max_tolerance, and search_pattern.
-Better not to change others' values.
-```
-blockord="/usr/local/libexec/blockor/blockord.sh"
-blockor="/usr/local/bin/blockor"
-blockor_file="/tmp/blockor_blockedlist"
-blockor_log_file="/var/log/blockord.log"
-blockor_whitelist="192.168.56.20 192.168.56.102"
-search_pattern="Disconnected from authenticating user root|Failed password"
-max_tolerance=10
+## Configuration: /usr/local/etc/blockor.conf
+The file is sourced as `/bin/sh`; keep it root-owned and not group/world
+writable (blockor refuses to run otherwise).
 
-auth_file="/var/log/auth.log"     # FreeBSD
-auth_file="/var/log/authlog"      # OpenBSD
+```sh
+auth_file="/var/log/auth.log"     # FreeBSD ( /var/log/authlog on OpenBSD )
+# auth_files="/var/log/auth.log /var/log/maillog"   # watch several at once
 
-```
+search_pattern="PAM: Authentication error|Failed password|Invalid user|..."
+max_tolerance=10        # ban after this many failures within findtime
+findtime=600            # sliding window in seconds (10 minutes)
+bantime=3600            # ban duration in seconds; 0 = permanent
+expire_interval=60      # how often (seconds) expired bans are released
 
-#### max_tolerance=10
-```
-IP will be blocked when more than 10 failed activities. Change to any number.
-```
-#### search_pattern
-```
-Add any text pattern with delimiter |
-example: search_pattern="Bad protocol version identification|..other patterns"
-```
-#### blockor_whitelist
-```
-IP in blockor_whitelist will be excluded from blocking. Add IP with space-separated.
-blockor_whitelist="192.168.56.20 192.168.56.102"
+blockor_whitelist="192.168.56.20 10.0.0.0/8 2001:db8::/32"
 
+notify_syslog="YES"     # log bans/unbans via logger(1)
+notify_email=""         # email address; requires mail(1)
+notify_command=""       # external hook: cmd <ban|unban> <ip> <count>
 ```
 
+### max_tolerance
+An IP is blocked once it exceeds this many failed attempts **within `findtime`
+seconds**. Old failures age out of the window, so occasional typos do not
+accumulate into a ban.
+
+### bantime
+How long a ban lasts before it is automatically lifted. Use `0` for permanent
+bans. Manual `blockor add` entries are always permanent.
+
+### search_pattern
+Extended-regex patterns that mark a failed attempt, separated by `|`:
+```
+search_pattern="Bad protocol version identification|Failed password"
+```
+
+### blockor_whitelist
+Space-separated IPs and/or CIDR ranges (IPv4 and IPv6). These are never blocked.
+
+### Notifications (optional)
+- `notify_syslog="YES"` logs each ban/unban via `logger(1)`.
+- `notify_email="you@example.com"` emails on each event (needs `mail(1)`).
+- `notify_command="/path/to/hook"` runs your script as
+  `hook <ban|unban> <ip> <count>`.
+
+## Files
+```
+/usr/local/bin/blockor                  CLI
+/usr/local/libexec/blockor/blockord.sh  log watcher daemon
+/usr/local/libexec/blockor/blockor.subr shared functions
+/usr/local/etc/blockor.conf             configuration
+/var/db/blockor/bans                    active bans (persist across reboot)
+/var/db/blockor/failures                recent failures (findtime window)
+/var/run/blockor/blockord.pid           daemon pid
+/var/log/blockord.log                   daemon log
+```
+
+## Development
+```
+make test          # run the test harness (stubs pfctl, no real PF needed)
+```
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Source code structure
 ```
 ├── LICENSE
 ├── Makefile
 ├── README.md
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── tests
+│   └── run_tests.sh
+├── usr
+│   └── local
+│       ├── bin
+│       │   └── blockor
+│       └── libexec
+│           └── blockor
+│               ├── blockord.sh
+│               └── blockor.subr
 ├── freebsd
-│   ├── Makefile
-│   └── usr
-│       └── local
-│           ├── etc
-│           │   ├── blockor.conf
-│           │   └── rc.d
-│           │       └── blockord
-│           ├── man
-│           │   └── man8
-│           │       └── blockor.8.gz
-│           └── share
-│               └── examples
-│                   └── blockor
-│                       └── blockor.example.conf
-├── images
-│   └── blockor.png
-├── openbsd
-│   ├── Makefile
-│   ├── etc
-│   │   └── rc.d
-│   │       └── blockord
-│   └── usr
-│       └── local
-│           ├── etc
-│           │   └── blockor.conf
-│           ├── man
-│           │   └── man8
-│           │       └── blockor.8.gz
-│           └── share
-│               └── examples
-│                   └── blockor
-│                       └── blockor.sample.conf
-└── usr
-    └── local
-        ├── bin
-        │   └── blockor
-        └── libexec
-            └── blockor
-                └── blockord.sh
-
+│   └── usr/local/{etc,man,share}      conf, rc.d, man page, example
+└── openbsd
+    ├── etc/rc.d/blockord
+    └── usr/local/{etc,man,share}      conf, man page, sample
 ```

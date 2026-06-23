@@ -1,31 +1,33 @@
 #!/bin/ksh
-
-# Copyright (c) 2022-2022, Muktadiur Rahman <muktadiur@gmail.com>
+#
+# Copyright (c) 2022-2026, Muktadiur Rahman <muktadiur@gmail.com>
 # All rights reserved.
+
+# pexp/rc_reload are consumed by the rc.subr framework, not this script.
+# shellcheck disable=SC2034
 
 daemon="/usr/local/libexec/blockor/blockord.sh"
 
+# shellcheck source=/dev/null
 . /etc/rc.d/rc.subr
 
-pexp="${daemon}"
+pexp="/bin/sh ${daemon}"
 rc_reload=NO
 
 rc_start() {
-    ${rcexec} "${daemon} &"
+    /usr/local/bin/blockor start >/dev/null 2>&1
 }
 
 rc_stop() {
-    blockor stop
+    /usr/local/bin/blockor stop >/dev/null 2>&1
 }
 
 rc_check() {
-    daemon_count=$(ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk | wc -l)
-    if [ $daemon_count -gt 0 ]; then
-        return 0
+    if [ -f /var/run/blockor/blockord.pid ]; then
+        kill -0 "$(cat /var/run/blockor/blockord.pid)" 2>/dev/null
     else
         return 1
     fi
 }
 
-rc_cmd $1
-
+rc_cmd "$1"

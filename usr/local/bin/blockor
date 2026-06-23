@@ -1,207 +1,165 @@
 #!/bin/sh
 #
-# Copyright (c) 2022-2022, Muktadiur Rahman <muktadiur@gmail.com>
+# Copyright (c) 2022-2026, Muktadiur Rahman <muktadiur@gmail.com>
 # All rights reserved.
 
 ## version
-version='0.1.2'
+version='0.2.0'
 
 PATH=${PATH}:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
 
-. /usr/local/etc/blockor.conf
+blockor_conf="/usr/local/etc/blockor.conf"
+blockor_subr="/usr/local/libexec/blockor/blockor.subr"
+
+# Refuse to source a config that any non-root user could have tampered with.
+# (portable check: ls perm string, group-write at col 6 or other-write at col 9.
+# ls is fine here - the path is fixed; find -perm +mode is not portable to OpenBSD.)
+if [ -f "$blockor_conf" ]; then
+    # shellcheck disable=SC2012
+    _perm=$(ls -ld "$blockor_conf" 2>/dev/null | cut -c1-10)
+    case "$_perm" in
+    ?????w????|????????w?)
+        printf 'blockor: error: %s is group/world writable; refusing to run\n' "$blockor_conf" >&2
+        exit 1
+        ;;
+    esac
+fi
+
+if [ ! -r "$blockor_conf" ]; then
+    printf 'blockor: error: %s not found\n' "$blockor_conf" >&2
+    printf '  example config: /usr/local/share/examples/blockor/blockor.example.conf\n' >&2
+    exit 1
+fi
+
+# shellcheck source=/dev/null
+. "$blockor_conf"
+# shellcheck source=../libexec/blockor/blockor.subr
+. "${blockor_subr:-/usr/local/libexec/blockor/blockor.subr}"
+
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
 blockor_usage() {
     cat << EOF
-Blockor protects FreeBSD, OpenBSD servers from brute-force attacks.
+blockor — protect FreeBSD and OpenBSD servers from brute-force attacks.
+
 Usage:
-  blockor command [args]
-Available Commands:
-  check         Check blockor.conf file and show config for /etc/pf.conf.
+  blockor <command> [args]
+
+Commands:
+  check         Check blockor.conf and the PF setup.
   start         Start the blockord daemon.
   stop          Stop the blockord daemon.
   restart       Restart the blockord daemon.
+  reload        Restart the daemon, keeping the current ban list.
   enable        Start the blockord daemon at boot.
-  disable       Not start the blockord daemon at boot.
-  add           Add IP to blocked list.
-  remove        Remove IP from blocked list.
-  flush         Remove all entries from blocked list.
-  list          Show blocked list with the failed count.
-  status        Running or Stopped.
-Use "blockor -v|--version" for version information.
+  disable       Do not start the blockord daemon at boot.
+  add IP...     Block one or more addresses (permanent).
+  remove IP...  Unblock one or more addresses.
+  flush         Remove all entries from the block list.
+  list          Show blocked addresses with failure count and time left.
+  top           Show top offenders within the findtime window.
+  status        Show whether the daemon is running and enabled at boot.
+
+Run "blockor --version" for version information.
 EOF
-    exit 1
+    exit "${1:-1}"
 }
 
 permission_check() {
-    if [ $(id -u) -ne 0 ]; then
-        echo "blockor(permission denied). root|doas|sudo required"
+    if [ "$(id -u)" -ne 0 ]; then
+        bo_err "must be run as root (use doas or sudo)"
         exit 1
     fi
 }
 
 blockor_version() {
-    echo "blockor(${version})"
+    echo "blockor ${version}"
     exit 0
+}
+
+# True when the daemon recorded in the pid file is alive.
+bo_running() {
+    [ -f "$pid_file" ] || return 1
+    _p=$(cat "$pid_file" 2>/dev/null)
+    [ -n "$_p" ] && kill -0 "$_p" 2>/dev/null
 }
 
 blockor_check() {
-    blockor_conf="/usr/local/etc/blockor.conf"
-    if [ ! -r $blockor_conf ]; then
-        echo "blockor($blockor_conf not found)"
-        echo "example: /usr/local/share/examples/blockor/blockor.example.conf"
+    _ok=1
+    printf '%sChecking blockor configuration%s\n\n' "$C_B" "$C_R"
+
+    if bo_pf_enabled; then
+        bo_ok "pf enabled"
+    else
+        bo_bad "pf not enabled"
+        printf '\n'
+        bo_err "pf is not enabled; nothing can be blocked"
         exit 1
     fi
 
-    if [ ! -c "/dev/pf" ]; then
-        echo "blockor(pf not enabled)"
-        exit 1
+    if bo_pf_table_loaded; then
+        bo_ok "table <$pf_table> loaded"
+    else
+        bo_bad "table <$pf_table> not loaded — nothing will be blocked"
+        _ok=0
     fi
-    echo "blockor(ok)"
+
+    if bo_pf_rule_loaded; then
+        bo_ok "blocking rule present"
+    else
+        bo_bad "no loaded rule references <$pf_table>"
+        _ok=0
+    fi
+
+    for f in ${auth_files:-$auth_file}; do
+        if [ -r "$f" ]; then
+            bo_ok "log readable  $f"
+        else
+            bo_bad "log not readable  $f"
+            _ok=0
+        fi
+    done
+
+    printf '\n'
+    if [ "$_ok" -eq 1 ]; then
+        printf '%sAll checks passed.%s\n' "$C_OK" "$C_R"
+        exit 0
+    fi
+
     cat <<EOF
-Add to /etc/pf.conf and run pfctl -f /etc/pf.conf(if not already done):
-table <blockor> persist
-block drop in quick on egress from <blockor> to any
+Add the following to /etc/pf.conf, then run: pfctl -f /etc/pf.conf
+
+  table <blockor> persist
+  block drop in quick on egress from <blockor> to any
 EOF
-exit 0
+    exit 1
 }
 
 blockor_start() {
-    if [ $(ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk | wc -l) -gt 0 ]; then
-        echo 'blockord(already running)'
+    if bo_running; then
+        bo_warn "blockord is already running (pid $(cat "$pid_file" 2>/dev/null))"
         exit 1
     fi
-    nohup $blockord > $blockor_log_file &
-    echo 'blockord(running)'
+    bo_ensure_dirs
+    nohup "$blockord" >> "$blockor_log_file" 2>&1 &
+    printf 'Started blockord (pid %s).\n' "$!"
 }
 
 blockor_stop() {
-    ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk |  awk '{print $1}' | xargs kill -9
-    ps ax | awk '/tail -n 0 -f/ && /auth.?log/' | grep -v awk | awk '{print $1}' | xargs kill -9
-    echo 'blockord(stopped)'
-}
-
-blockor_add() {
-    IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
-    check_whitelisted $IP
-    if [ ! -z $IP ]; then
-        pfctl -t blockor -q -T add $IP
-    fi
-}
-
-check_whitelisted() {
-    for white_ip in $(echo $blockor_whitelist); do
-        if [ ${1} = "${white_ip}" ]; then
-            echo 'blockor(whitelisted. skipped.' $white_ip')'
-        fi
-    done
-}
-
-blockor_remove() {
-    IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
-    if [ ! -z $IP ]; then
-        pfctl -t blockor -q -T delete $IP
-        check_blockor_file
-        OS=$(uname -s | tr '[A-Z]' '[a-z]')
-        if [ $OS = 'openbsd' ]; then
-            sed -i '/'"${IP}"'$/d' $blockor_file
-        else
-            sed -i '' '/'"${IP}"'$/d' $blockor_file
-        fi
-    fi
-}
-
-check_blockor_file() {
-    if [ ! -f $blockor_file ]; then
-        exit 1
-    fi
-}
-
-blockor_flush() {
-    pfctl -t blockor -q -T flush
-    check_blockor_file
-    cat /dev/null > $blockor_file
-    echo 'blockor(flushed)'
-    exit 0
-}
-
-blockor_list() {
-    total=$(pfctl -t blockor -T show | wc -l)
-    echo 'Total' $total 'IP(s) blocked'
-    pfctl -t blockor -T show
-
-    check_blockor_file
-
-    echo "count  IP"
-    cat $blockor_file | sort | uniq -c | sort -nr
-    exit 0
-}
-
-freebsd_status() {
-    RC=$(cat /etc/rc.conf | grep blockord_enable | cut -d "=" -f2 | tr '[A-Z]' '[a-z]')
-    case "$RC" in
-    *yes*)
-        echo 'blockord('${1}'.enabled)'
-        ;;
-    *)
-        echo 'blockord('${1}'.disabled)'
-        ;;
-    esac
-}
-
-openbsd_status() {
-    if [ ! -f /etc/rc.conf.local ]; then
-        echo 'blockord('${1}'.disabled)'
-        exit 1
-    fi
-
-    RC_LOCAL=$(cat /etc/rc.conf.local | awk '/pkg_scripts/ && /blockord/')
-    case "$RC_LOCAL" in 
-    *blockord*)
-        echo 'blockord('${1}'.enabled)'
-        ;;
-    *)
-        echo 'blockord('${1}'.disabled)'
-        ;;
-    esac
-}
-
-blockor_status() {
-    OS=$(uname -s | tr '[A-Z]' '[a-z]')
-    if [ $(ps ax | awk '/libexec/ && /blockord.sh/' | grep -v awk | wc -l) -gt 0 ]; then
-        if [ $OS = 'openbsd' ]; then
-            openbsd_status 'running'
-        else
-            freebsd_status 'running'
-        fi
+    if bo_running; then
+        _p=$(cat "$pid_file" 2>/dev/null)
+        kill -TERM "$_p" 2>/dev/null
+        _i=0
+        while kill -0 "$_p" 2>/dev/null && [ "$_i" -lt 10 ]; do
+            sleep 1
+            _i=$((_i + 1))
+        done
+        kill -0 "$_p" 2>/dev/null && kill -KILL "$_p" 2>/dev/null
+        rm -f "$pid_file" "$fifo_file"
+        printf 'Stopped blockord.\n'
     else
-        if [ $OS = 'openbsd' ]; then
-            openbsd_status 'stopped'
-        else
-            freebsd_status 'stopped'
-        fi
-    fi
-    exit 0
-}
-
-blockor_eanble() {
-    OS=$(uname -s | tr '[A-Z]' '[a-z]')
-    if [ $OS = 'openbsd' ]; then
-        rcctl enable blockord
-        echo 'blockord(eanbled)'
-    else
-        sysrc blockord_enable="YES"
-        echo 'blockord(eanbled)'
-    fi
-}
-
-blockor_disable() {
-    OS=$(uname -s | tr '[A-Z]' '[a-z]')
-    if [ $OS = 'openbsd' ]; then
-        rcctl disable blockord
-        echo 'blockord(disabled)'
-    else
-        sysrc blockord_enable="NO"
-        echo 'blockord(disabled)'
+        rm -f "$pid_file" "$fifo_file"
+        bo_warn "blockord is not running"
     fi
 }
 
@@ -211,15 +169,161 @@ blockor_restart() {
     exit 0
 }
 
-is_valid_ip() {
-    IP=$(echo ${1} | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}')
-    if [ -z $IP ]; then
-        echo 'blockor(invalid IP)'
-        exit 1
+# State (bans/failures) lives on disk, so a restart preserves the ban list.
+blockor_reload() {
+    blockor_stop
+    blockor_start
+    exit 0
+}
+
+blockor_add() {
+    bo_ensure_dirs
+    bo_load_whitelist
+    if ! bo_pf_table_loaded; then
+        bo_warn "table <$pf_table> not loaded — run 'blockor check'"
+    fi
+    _blocked=''
+    _skipped=''
+    _n=0
+    for arg in "$@"; do
+        if ! bo_valid_ip "$arg"; then
+            bo_err "invalid IP address: $arg"
+            continue
+        fi
+        if bo_is_whitelisted "$arg"; then
+            _skipped="${_skipped:+$_skipped, }$arg"
+            continue
+        fi
+        # Manual adds are permanent (bantime 0); the admin chose them explicitly.
+        if bo_ban "$arg" 0 0; then
+            _blocked="${_blocked:+$_blocked, }$arg"
+            _n=$((_n + 1))
+        fi
+    done
+    [ -n "$_blocked" ] && printf 'Blocked %d address(es): %s\n' "$_n" "$_blocked"
+    [ -n "$_skipped" ] && printf 'Skipped (whitelisted): %s\n' "$_skipped"
+    exit 0
+}
+
+blockor_remove() {
+    bo_ensure_dirs
+    _removed=''
+    _n=0
+    for arg in "$@"; do
+        if ! bo_valid_ip "$arg"; then
+            bo_err "invalid IP address: $arg"
+            continue
+        fi
+        bo_unban "$arg"
+        _removed="${_removed:+$_removed, }$arg"
+        _n=$((_n + 1))
+    done
+    [ -n "$_removed" ] && printf 'Unblocked %d address(es): %s\n' "$_n" "$_removed"
+    exit 0
+}
+
+blockor_flush() {
+    _n=$(pfctl -t "$pf_table" -T show 2>/dev/null | grep -c .)
+    pfctl -t "$pf_table" -q -T flush >/dev/null 2>&1
+    : > "$bans_file" 2>/dev/null
+    : > "$failures_file" 2>/dev/null
+    printf 'Flushed — removed %s address(es) from the block list.\n' "$_n"
+    exit 0
+}
+
+blockor_list() {
+    _total=$(pfctl -t "$pf_table" -T show 2>/dev/null | grep -c .)
+    if [ "$_total" -eq 0 ]; then
+        printf 'No addresses blocked.\n'
+        exit 0
+    fi
+    printf '%s address(es) blocked\n\n' "$_total"
+    if [ -s "$bans_file" ]; then
+        _now=$(bo_now)
+        printf '%s%-40s %8s   %s%s\n' "$C_B" "ADDRESS" "FAILURES" "EXPIRES IN" "$C_R"
+        while read -r _epoch _ip _cnt _bt; do
+            [ -n "$_ip" ] || continue
+            if [ "${_bt:-0}" -le 0 ] 2>/dev/null; then
+                _rem="permanent"
+            else
+                _rem=$(bo_human_time "$(( _bt - (_now - _epoch) ))")
+            fi
+            [ "${_cnt:-0}" -eq 0 ] 2>/dev/null && _cnt='-'
+            printf '%-40s %8s   %s\n' "$_ip" "$_cnt" "$_rem"
+        done < "$bans_file"
+    else
+        pfctl -t "$pf_table" -T show 2>/dev/null
+    fi
+    exit 0
+}
+
+blockor_top() {
+    if [ ! -s "$failures_file" ]; then
+        printf 'No recent failures.\n'
+        exit 0
+    fi
+    _cutoff=$(( $(bo_now) - findtime ))
+    printf '%sTop offenders — last %s%s\n\n' "$C_B" "$(bo_human_time "$findtime")" "$C_R"
+    printf '%s%8s   %s%s\n' "$C_B" "FAILURES" "ADDRESS" "$C_R"
+    awk -v cut="$_cutoff" '$1 >= cut {print $2}' "$failures_file" \
+        | sort | uniq -c | sort -nr | head -20 \
+        | while read -r _c _i; do
+            printf '%8s   %s\n' "$_c" "$_i"
+        done
+    exit 0
+}
+
+freebsd_boot_state() {
+    RC=$(grep blockord_enable /etc/rc.conf 2>/dev/null | cut -d "=" -f2 | tr '[:upper:]' '[:lower:]')
+    case "$RC" in
+    *yes*) echo "enabled at boot" ;;
+    *)     echo "disabled at boot" ;;
+    esac
+}
+
+openbsd_boot_state() {
+    if [ -f /etc/rc.conf.local ] && awk '/pkg_scripts/ && /blockord/' /etc/rc.conf.local | grep -q blockord; then
+        echo "enabled at boot"
+    else
+        echo "disabled at boot"
     fi
 }
 
-[ $# -lt 1 ] && usage
+blockor_status() {
+    if [ "$OS" = 'openbsd' ]; then
+        _boot=$(openbsd_boot_state)
+    else
+        _boot=$(freebsd_boot_state)
+    fi
+    if bo_running; then
+        printf '%s\342\227\217%s  blockord — running   (%s, pid %s)\n' \
+            "$C_OK" "$C_R" "$_boot" "$(cat "$pid_file" 2>/dev/null)"
+    else
+        printf '%s\342\227\217%s  blockord — stopped   (%s)\n' \
+            "$C_ERR" "$C_R" "$_boot"
+    fi
+    exit 0
+}
+
+blockor_enable() {
+    if [ "$OS" = 'openbsd' ]; then
+        rcctl enable blockord
+    else
+        sysrc blockord_enable="YES" >/dev/null
+    fi
+    printf 'blockord will start at boot.\n'
+}
+
+blockor_disable() {
+    if [ "$OS" = 'openbsd' ]; then
+        rcctl disable blockord
+    else
+        sysrc blockord_enable="NO" >/dev/null
+    fi
+    printf 'blockord will not start at boot.\n'
+}
+
+[ $# -lt 1 ] && blockor_usage
 
 CMD=$1
 shift
@@ -229,7 +333,7 @@ version|-v|--version)
     blockor_version
     ;;
 help|-h|--help)
-    blockor_usage
+    blockor_usage 0
     ;;
 check|--check)
     permission_check
@@ -249,25 +353,19 @@ restart|--restart)
     permission_check
     blockor_restart
     ;;
+reload)
+    permission_check
+    blockor_reload
+    ;;
 add|-a|--add)
     permission_check
-    is_valid_ip $1
-    while [ ! -z $1 ]; do
-        blockor_add $1
-        shift
-    done
-    echo 'blockor(ok)'
-    exit 0
+    [ $# -lt 1 ] && blockor_usage
+    blockor_add "$@"
     ;;
 remove|-r|--remove)
     permission_check
-    is_valid_ip $1
-    while [ ! -z $1 ]; do
-        blockor_remove $1
-        shift
-    done
-    echo 'blockor(removed)'
-    exit 0
+    [ $# -lt 1 ] && blockor_usage
+    blockor_remove "$@"
     ;;
 flush|-f|--flush)
     permission_check
@@ -277,13 +375,17 @@ list|-l|--list)
     permission_check
     blockor_list
     ;;
+top|-t|--top)
+    permission_check
+    blockor_top
+    ;;
 status|-s|--status)
     permission_check
     blockor_status
     ;;
 enable|-e|--enable)
     permission_check
-    blockor_eanble
+    blockor_enable
     ;;
 disable|-d|--disable)
     permission_check
