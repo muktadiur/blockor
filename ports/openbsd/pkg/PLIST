@@ -1,0 +1,9 @@
+@bin bin/blockor
+libexec/blockor/
+libexec/blockor/blockord.sh
+libexec/blockor/blockor.subr
+share/examples/blockor/
+share/examples/blockor/blockor.conf
+@sample ${SYSCONFDIR}/blockor.conf
+@rcscript ${RCDIR}/blockord
+@man man/man8/blockor.8

@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# PROVIDE: blockord
+# REQUIRE: pf LOGIN
+# KEYWORD: shutdown
+#
+# Add the following line to /etc/rc.conf to enable blockord:
+# blockord_enable="YES"
+
+. /etc/rc.subr
+
+name="blockord"
+rcvar="blockord_enable"
+
+load_rc_config "$name"
+
+: "${blockord_enable:=NO}"
+
+start_cmd="%%PREFIX%%/bin/blockor start"
+stop_cmd="%%PREFIX%%/bin/blockor stop"
+restart_cmd="%%PREFIX%%/bin/blockor restart"
+status_cmd="%%PREFIX%%/bin/blockor status"
+
+run_rc_command "$1"
