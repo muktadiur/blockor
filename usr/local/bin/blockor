@@ -59,6 +59,8 @@ Commands:
   list          Show blocked addresses with failure count and time left.
   top           Show top offenders within the findtime window.
   test [log]    Dry run: show what would be banned from a log, change nothing.
+  stats         Show ban counts and top offenders.
+  report [IP..] Report banned IP(s) to AbuseIPDB (needs abuseipdb_key + curl).
   status        Show whether the daemon is running and enabled at boot.
 
 Run "blockor --version" for version information.
@@ -310,6 +312,57 @@ EOF
     exit 0
 }
 
+blockor_stats() {
+    _now=$(bo_now)
+    _blocked=$(pfctl -t "$pf_table" -T show 2>/dev/null | grep -c .)
+    printf '%sblockor statistics%s\n\n' "$C_B" "$C_R"
+    printf '  %-20s %s\n' "Currently blocked" "$_blocked"
+    printf '  %-20s %s\n' "Bans (last 24h)" "$(bo_bans_since $((_now - 86400)))"
+    printf '  %-20s %s\n' "Bans (last 7 days)" "$(bo_bans_since $((_now - 604800)))"
+    printf '  %-20s %s\n' "Bans (recorded)" "$(bo_history_total)"
+
+    _top=$(bo_top_offenders 10)
+    [ -n "$_top" ] || { exit 0; }
+    printf '\n%sTop offenders (all time)%s\n' "$C_B" "$C_R"
+    if command -v geoiplookup >/dev/null 2>&1; then
+        printf '%s%6s   %-24s %s%s\n' "$C_B" "BANS" "COUNTRY" "ADDRESS" "$C_R"
+        printf '%s\n' "$_top" | while read -r _c _ip; do
+            [ -n "$_ip" ] && printf '%6s   %-24s %s\n' "$_c" "$(bo_country "$_ip")" "$_ip"
+        done
+    else
+        printf '%s%6s   %s%s\n' "$C_B" "BANS" "ADDRESS" "$C_R"
+        printf '%s\n' "$_top" | while read -r _c _ip; do
+            [ -n "$_ip" ] && printf '%6s   %s\n' "$_c" "$_ip"
+        done
+    fi
+    exit 0
+}
+
+blockor_report() {
+    if [ -z "$abuseipdb_key" ]; then
+        bo_err "abuseipdb_key is not set in $blockor_conf"
+        exit 1
+    fi
+    if ! command -v curl >/dev/null 2>&1; then
+        bo_err "curl is required for AbuseIPDB reporting (pkg install curl)"
+        exit 1
+    fi
+    _targets=$*
+    [ -n "$_targets" ] || _targets=$(pfctl -t "$pf_table" -T show 2>/dev/null)
+    _n=0
+    for _ip in $_targets; do
+        if ! bo_valid_ip "$_ip"; then
+            bo_err "invalid IP address: $_ip"
+            continue
+        fi
+        if bo_report_abuseipdb "$_ip" "blockor: brute-force attempts (FreeBSD/OpenBSD)"; then
+            _n=$((_n + 1))
+        fi
+    done
+    printf 'Reported %d address(es) to AbuseIPDB.\n' "$_n"
+    exit 0
+}
+
 freebsd_boot_state() {
     RC=$(grep blockord_enable /etc/rc.conf 2>/dev/null | cut -d "=" -f2 | tr '[:upper:]' '[:lower:]')
     case "$RC" in
@@ -419,6 +472,14 @@ top|-t|--top)
 test|--test|--dry-run)
     permission_check
     blockor_test "$1"
+    ;;
+stats|--stats)
+    permission_check
+    blockor_stats
+    ;;
+report|--report-abuseipdb)
+    permission_check
+    blockor_report "$@"
     ;;
 status|-s|--status)
     permission_check

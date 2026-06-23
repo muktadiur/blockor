@@ -12,6 +12,12 @@ All notable changes to blockor are documented here.
   auto-bans an address that currently has a live SSH session, so a noisy
   reconnect or an over-broad pattern can't lock you out of your own box. The
   SSH port is configurable via `ssh_port`.
+- **`blockor stats`** — ban counts (last 24h, last 7 days, total) and top
+  offenders from an append-only history, with country lookup via `geoiplookup`
+  when available.
+- **AbuseIPDB reporting** (opt-in) — set `abuseipdb_key` to auto-report
+  attackers when banned (requires `curl`), or report on demand with
+  `blockor report [IP...]`.
 
 ## [0.2.0] - 2026-06-23
 

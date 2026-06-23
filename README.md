@@ -83,6 +83,8 @@ blockor command [args]
   list          Show blocked IPs with failure count and time left.
   top           Show top offenders seen within the findtime window.
   test [log]    Dry run: show what would be banned from a log, change nothing.
+  stats         Show ban counts and top offenders (optional GeoIP).
+  report [IP..] Report banned IP(s) to AbuseIPDB (needs abuseipdb_key + curl).
   status        Running or Stopped (enabled|disabled).
 ```
 
@@ -165,6 +167,39 @@ Would ban at >= 10 failures (whole-file totals; no changes made).
 
 1 of 3 address(es) would be banned.
 ```
+
+## Stats & reporting
+
+`blockor stats` summarizes activity from an append-only ban history:
+
+```
+bsd# blockor stats
+blockor statistics
+
+  Currently blocked    37
+  Bans (last 24h)      14
+  Bans (last 7 days)   58
+  Bans (recorded)      214
+
+Top offenders (all time)
+  BANS   COUNTRY              ADDRESS
+     9   CN, China            203.0.113.7
+     5   RU, Russia           45.155.205.9
+```
+
+The `COUNTRY` column appears only if `geoiplookup` (the GeoIP package) is
+installed; otherwise it is omitted.
+
+**Contribute to AbuseIPDB (optional).** Set an API key in `blockor.conf` and
+blockor will auto-report attackers when they are banned (requires `curl`):
+
+```sh
+abuseipdb_key="your-api-key"     # empty = disabled (default)
+abuseipdb_categories="18,22"     # 18=Brute-Force, 22=SSH
+```
+
+You can also report on demand: `blockor report` (all currently blocked) or
+`blockor report 203.0.113.7 ...` (specific addresses).
 
 ## Lock-out safety
 

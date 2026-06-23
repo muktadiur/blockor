@@ -57,7 +57,16 @@ cat "${NETSTAT_OUT:-/dev/null}"
 STUB
 chmod +x "$bindir/netstat"
 
-export PFSTUB_DIR NETSTAT_OUT
+# stub curl: records its arguments to $CURL_LOG instead of hitting the network
+CURL_LOG="$work/curl.log"; : > "$CURL_LOG"
+cat > "$bindir/curl" <<'STUB'
+#!/bin/sh
+echo "$*" >> "${CURL_LOG:-/dev/null}"
+exit 0
+STUB
+chmod +x "$bindir/curl"
+
+export PFSTUB_DIR NETSTAT_OUT CURL_LOG
 PATH="$bindir:$PATH"
 export PATH
 
@@ -199,6 +208,37 @@ counts=$(bo_dryrun_counts "$dlog")
 eq "dry-run top offender"  "$(printf '%s\n' "$counts" | head -1 | awk '{print $2}')" "203.0.113.7"
 eq "dry-run top count"     "$(printf '%s\n' "$counts" | head -1 | awk '{print $1}')" "2"
 case "$counts" in *203.0.113.9*) bad "accepted login wrongly counted" ;; *) ok "accepted login not counted" ;; esac
+
+echo "== ban history + stats =="
+{
+    printf '%s 203.0.113.7 9\n'    "$(( $(bo_now) - 100 ))"
+    printf '%s 203.0.113.7 9\n'    "$(( $(bo_now) - 200 ))"
+    printf '%s 198.51.100.9 5\n'   "$(( $(bo_now) - 100000 ))"
+} > "$history_file"
+eq "bans in last 24h"   "$(bo_bans_since "$(( $(bo_now) - 86400 ))")" "2"
+eq "total bans recorded" "$(bo_history_total)" "3"
+eq "top offender"        "$(bo_top_offenders 10 | head -1 | awk '{print $2}')" "203.0.113.7"
+eq "top offender count"  "$(bo_top_offenders 10 | head -1 | awk '{print $1}')" "2"
+
+echo "== bo_ban records history =="
+bo_ban "203.0.113.250" 7 0 >/dev/null 2>&1
+case "$(cat "$history_file")" in
+    *203.0.113.250*) ok "ban appended to history" ;;
+    *) bad "ban not recorded in history" ;;
+esac
+
+echo "== AbuseIPDB reporting (opt-in) =="
+: > "$CURL_LOG"
+abuseipdb_key=""
+bo_report_abuseipdb "203.0.113.7" "test"
+eq "no report when key unset" "$(grep -c . "$CURL_LOG")" "0"
+abuseipdb_key="TESTKEY123"
+bo_report_abuseipdb "203.0.113.7" "brute-force"
+case "$(cat "$CURL_LOG")" in
+    *203.0.113.7*TESTKEY123*) ok "reports ip + key when configured" ;;
+    *) bad "report missing ip/key: $(cat "$CURL_LOG")" ;;
+esac
+abuseipdb_key=""
 
 echo
 echo "Passed: $pass  Failed: $fail"
