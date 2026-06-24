@@ -22,12 +22,17 @@
 : "${notify_syslog:=YES}"
 : "${notify_email:=}"
 : "${notify_command:=}"
+: "${protect_active_ssh:=YES}"
+: "${ssh_port:=22}"
+: "${abuseipdb_key:=}"
+: "${abuseipdb_categories:=18,22}"
 : "${pf_table:=blockor}"
 : "${pf_whitelist_table:=blockor_white}"
 : "${search_pattern:=PAM: Authentication error|Failed password|Invalid user|Unable to negotiate with|Bad protocol version identification|Disconnected from authenticating user root}"
 
 failures_file="${db_dir}/failures"
 bans_file="${db_dir}/bans"
+history_file="${db_dir}/history"
 # pid_file/fifo_file are part of this library's interface, used by the CLI and
 # daemon that source it (so they look unused when this file is linted alone).
 # shellcheck disable=SC2034
@@ -92,7 +97,8 @@ bo_ensure_dirs() {
     chmod 700 "$db_dir" "$run_dir" 2>/dev/null
     [ -f "$failures_file" ] || : > "$failures_file"
     [ -f "$bans_file" ] || : > "$bans_file"
-    chmod 600 "$failures_file" "$bans_file" 2>/dev/null
+    [ -f "$history_file" ] || : > "$history_file"
+    chmod 600 "$failures_file" "$bans_file" "$history_file" 2>/dev/null
 }
 
 # Pull the source address out of a log line. Strips a leading BSD syslog
@@ -197,6 +203,8 @@ bo_ban() {
     bo_is_banned "$_ip" && return 0
     pfctl -t "$pf_table" -q -T add "$_ip" >/dev/null 2>&1 || return 1
     printf '%s %s %s %s\n' "$(bo_now)" "$_ip" "$_bcount" "$_bt" >> "$bans_file"
+    # append-only history for `blockor stats` (never pruned)
+    printf '%s %s %s\n' "$(bo_now)" "$_ip" "$_bcount" >> "$history_file"
     bo_log "banned ${_ip} (${_bcount} failures, bantime=${_bt}s)"
     bo_notify ban "$_ip" "$_bcount"
     return 0
@@ -275,6 +283,74 @@ bo_restore_bans() {
     mv "$_tmp" "$bans_file"
 }
 
+# True if $1 currently has an established connection to the local SSH port.
+# Best-effort lock-out guard: returns 1 (not active) when it cannot tell, so it
+# never interferes with normal banning. Disabled when protect_active_ssh is off.
+bo_is_active_ssh_peer() {
+    _ip=$1
+    case "$protect_active_ssh" in
+        [Yy]*|1) ;;
+        *) return 1 ;;
+    esac
+    netstat -n -p tcp 2>/dev/null | awk -v ip="$_ip" -v lport=".${ssh_port}" '
+        /ESTABLISHED/ {
+            local = $4; foreign = $5
+            if (substr(local, length(local) - length(lport) + 1) == lport) {
+                sub(/\.[0-9]+$/, "", foreign)
+                if (foreign == ip) found = 1
+            }
+        }
+        END { exit(found ? 0 : 1) }
+    '
+}
+
+# Number of bans recorded since epoch $1 (from the append-only history).
+bo_bans_since() {
+    [ -f "$history_file" ] || { echo 0; return 0; }
+    awk -v s="$1" '$1 >= s { n++ } END { print n+0 }' "$history_file"
+}
+
+# Total number of bans ever recorded.
+bo_history_total() {
+    [ -f "$history_file" ] || { echo 0; return 0; }
+    grep -c . "$history_file"
+}
+
+# "<times-banned> <ip>" lines for the most-banned addresses (default top 10).
+bo_top_offenders() {
+    [ -f "$history_file" ] || return 0
+    awk '{ print $2 }' "$history_file" | sort | uniq -c | sort -rn | head -n "${1:-10}"
+}
+
+# Best-effort country for an address via geoiplookup(1); "-" if unavailable.
+bo_country() {
+    command -v geoiplookup >/dev/null 2>&1 || { printf '-'; return 0; }
+    _c=$(geoiplookup "$1" 2>/dev/null | head -1 | sed 's/^[^:]*: //')
+    [ -n "$_c" ] && printf '%s' "$_c" || printf '-'
+}
+
+# Report an address to AbuseIPDB (opt-in: needs abuseipdb_key and curl).
+# $1=ip $2=comment. No-op and success if disabled/unavailable.
+bo_report_abuseipdb() {
+    [ -n "$abuseipdb_key" ] || return 0
+    command -v curl >/dev/null 2>&1 || return 0
+    curl -fsS -m 15 https://api.abuseipdb.com/api/v2/report \
+        --data-urlencode "ip=$1" \
+        -d "categories=${abuseipdb_categories}" \
+        --data-urlencode "comment=$2" \
+        -H "Key: ${abuseipdb_key}" \
+        -H "Accept: application/json" >/dev/null 2>&1
+}
+
+# Report "<count> <ip>" lines (most failures first) for a log file, using the
+# same pattern matching and IP extraction as live detection. No side effects;
+# used by `blockor test` (dry run).
+bo_dryrun_counts() {
+    grep -E "$search_pattern" "$1" 2>/dev/null \
+        | while IFS= read -r _l; do bo_extract_ip "$_l"; done \
+        | grep -v '^$' | sort | uniq -c | sort -rn
+}
+
 # Handle one raw log line: match pattern, extract IP, skip whitelisted/already
 # banned, record the failure, and ban once the window count crosses the limit.
 bo_process_line() {
@@ -287,7 +363,15 @@ bo_process_line() {
     bo_record_failure "$_ip"
     _count=$(bo_window_count "$_ip")
     if [ "$_count" -ge "$max_tolerance" ]; then
-        bo_ban "$_ip" "$_count"
+        # Never auto-ban an address with a live SSH session (lock-out guard).
+        if bo_is_active_ssh_peer "$_ip"; then
+            bo_log "skipped ban of ${_ip} (active SSH session)"
+            return 0
+        fi
+        if bo_ban "$_ip" "$_count" && [ -n "$abuseipdb_key" ]; then
+            # opt-in; backgrounded so the network call never blocks detection
+            bo_report_abuseipdb "$_ip" "blockor: SSH/auth brute-force (${_count} failures)" &
+        fi
     fi
     return 0
 }

@@ -25,6 +25,7 @@ NO_BUILD=	yes
 PLIST_FILES=	bin/blockor \
 		libexec/blockor/blockord.sh \
 		libexec/blockor/blockor.subr \
+		etc/blockor.pf.conf \
 		"@sample etc/blockor.conf.sample" \
 		share/man/man8/blockor.8.gz
 
@@ -38,6 +39,8 @@ do-install:
 		${STAGEDIR}${PREFIX}/libexec/blockor/blockor.subr
 	${INSTALL_DATA} ${WRKSRC}/freebsd/usr/local/etc/blockor.conf \
 		${STAGEDIR}${PREFIX}/etc/blockor.conf.sample
+	${INSTALL_DATA} ${WRKSRC}/freebsd/usr/local/etc/blockor.pf.conf \
+		${STAGEDIR}${PREFIX}/etc/blockor.pf.conf
 	@${MKDIR} ${STAGEDIR}${PREFIX}/share/man/man8
 	gzip -dc ${WRKSRC}/freebsd/usr/local/man/man8/blockor.8.gz > \
 		${STAGEDIR}${PREFIX}/share/man/man8/blockor.8

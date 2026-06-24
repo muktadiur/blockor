@@ -2,6 +2,27 @@
 
 All notable changes to blockor are documented here.
 
+## [Unreleased]
+
+### Added
+- **One-line PF setup.** Installs `/usr/local/etc/blockor.pf.conf` (the table +
+  block rule); wire it up by adding `include "/usr/local/etc/blockor.pf.conf"`
+  to `/etc/pf.conf` instead of hand-copying the rules. `blockor check` now
+  recommends the include line, and inlining the rules is still supported.
+- **`blockor test [logfile]`** — a dry run that scans a log and shows which
+  addresses would be banned with the current pattern, threshold, and whitelist,
+  without touching PF or any state. Use it to tune settings before going live.
+- **Lock-out safety** (`protect_active_ssh`, default on) — blockor never
+  auto-bans an address that currently has a live SSH session, so a noisy
+  reconnect or an over-broad pattern can't lock you out of your own box. The
+  SSH port is configurable via `ssh_port`.
+- **`blockor stats`** — ban counts (last 24h, last 7 days, total) and top
+  offenders from an append-only history, with country lookup via `geoiplookup`
+  when available.
+- **AbuseIPDB reporting** (opt-in) — set `abuseipdb_key` to auto-report
+  attackers when banned (requires `curl`), or report on demand with
+  `blockor report [IP...]`.
+
 ## [0.2.0] - 2026-06-23
 
 ### Added

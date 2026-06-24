@@ -1,4 +1,5 @@
 @bin bin/blockor
+etc/blockor.pf.conf
 libexec/blockor/
 libexec/blockor/blockord.sh
 libexec/blockor/blockor.subr
