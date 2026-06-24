@@ -32,15 +32,25 @@ cd blockor
 make install
 ```
 
-### 1. Add the PF table and rule to /etc/pf.conf
+### 1. Wire up PF
+Installation ships the table and block rule in `/usr/local/etc/blockor.pf.conf`.
+Just `include` it from `/etc/pf.conf`, near the **top** of your filter rules
+(before any `pass` rules, so the `quick` block wins):
 ```
-table <blockor> persist
-block drop in quick on egress from <blockor> to any
+include "/usr/local/etc/blockor.pf.conf"
 ```
 Then reload PF:
 ```
 pfctl -f /etc/pf.conf
 ```
+<details>
+<summary>Prefer to inline the rules instead of including the file?</summary>
+
+```
+table <blockor> persist
+block drop in quick on egress from <blockor> to any
+```
+</details>
 
 ### 2. Verify the setup
 ```

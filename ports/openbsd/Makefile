@@ -35,6 +35,10 @@ do-install:
 	${INSTALL_DATA_DIR} ${PREFIX}/share/examples/blockor
 	${INSTALL_DATA} ${WRKSRC}/openbsd/usr/local/etc/blockor.conf \
 		${PREFIX}/share/examples/blockor/blockor.conf
+	# pf snippet is included from pf.conf at its real path, not edited by users
+	${INSTALL_DATA_DIR} ${PREFIX}/etc
+	${INSTALL_DATA} ${WRKSRC}/openbsd/usr/local/etc/blockor.pf.conf \
+		${PREFIX}/etc/blockor.pf.conf
 	${INSTALL_SCRIPT} ${WRKSRC}/openbsd/etc/rc.d/blockord \
 		${RCDIR}/blockord
 	${INSTALL_DATA_DIR} ${PREFIX}/man/man8

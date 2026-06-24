@@ -5,6 +5,10 @@ All notable changes to blockor are documented here.
 ## [Unreleased]
 
 ### Added
+- **One-line PF setup.** Installs `/usr/local/etc/blockor.pf.conf` (the table +
+  block rule); wire it up by adding `include "/usr/local/etc/blockor.pf.conf"`
+  to `/etc/pf.conf` instead of hand-copying the rules. `blockor check` now
+  recommends the include line, and inlining the rules is still supported.
 - **`blockor test [logfile]`** — a dry run that scans a log and shows which
   addresses would be banned with the current pattern, threshold, and whitelist,
   without touching PF or any state. Use it to tune settings before going live.

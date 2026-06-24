@@ -130,10 +130,11 @@ blockor_check() {
     fi
 
     cat <<EOF
-Add the following to /etc/pf.conf, then run: pfctl -f /etc/pf.conf
+Add this line near the top of your filter rules in /etc/pf.conf:
 
-  table <blockor> persist
-  block drop in quick on egress from <blockor> to any
+  include "/usr/local/etc/blockor.pf.conf"
+
+then reload PF:  pfctl -f /etc/pf.conf
 EOF
     exit 1
 }

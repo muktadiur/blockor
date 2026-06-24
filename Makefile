@@ -26,6 +26,7 @@ uninstall:
 	@rm -vf /usr/local/bin/blockor
 	@rm -rvf /usr/local/libexec/blockor
 	@rm -vf /usr/local/etc/blockor.conf
+	@rm -vf /usr/local/etc/blockor.pf.conf
 	@rm -vf /usr/local/man/man8/blockor.8.gz
 	@rm -rvf /usr/local/share/examples/blockor
 	@echo "Kept: /var/db/blockor (state) and /var/log/blockord.log (log)."
